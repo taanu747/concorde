@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Local ADS-B Flight Tracker</title>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ ts }}">
+</head>
+
+<body>
+
+    <div id="header">
+        <h1>Live Local ADS-B Flight Tracker</h1>
+        <div id="status-indicator">
+            <span id="aircraft-count" style="margin-right: 12px; font-weight: 600; color: #cbd5e1;">0 Aircraft</span>
+            <span class="dot live"></span> Live Data
+        </div>
+    </div>
+
+    <!-- Weather Controls -->
+    <label id="weather-control" for="weather-toggle">
+        <input type="checkbox" id="weather-toggle">
+        Weather Mode
+    </label>
+
+    <!-- Theme Controls -->
+    <label id="theme-control" for="theme-toggle">
+        <input type="checkbox" id="theme-toggle">
+        Dark Mode
+    </label>
+
+    <!-- Map Container -->
+    <div id="map"></div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <!-- Custom JS -->
+    <script src="{{ url_for('static', filename='app.js') }}?v={{ ts }}"></script>
+</body>
+
+</html>

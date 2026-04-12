@@ -1,0 +1,25 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# VS Code
+.vscode/
+
+# Project specific data files
+# Ignoring large datasets and dynamically generated json
+tracker/aircraftDatabase.csv
+tracker/aircraft.json
+tracker/stats.json
+tracker/history/
+tracker/history_*.json
+test/
