@@ -169,10 +169,16 @@ const drawPrediction = (plane) => {
     // Smart Landing Predictor
     const altRaw = plane.alt_baro ?? plane.alt ?? plane.altitude ?? 0;
     const alt = altRaw === 'ground' ? 0 : Number(altRaw);
+    const planeType = getPlaneType(plane);
 
     // If plane is low & slowing down/descending (we don't care about a speed or altitude floor here)
     if (alt < 20000 && plane.gs !== undefined && plane.gs < 400) {
         for (let airport of LOCAL_AIRPORTS) {
+            // Stop small planes (like Cessnas) from snapping to major commercial airports like Boston
+            if (airport.id === 'BOS' && (planeType === 'small' || planeType === 'prop' || planeType === 'heli')) {
+                continue; // Skip prediction for this airport
+            }
+
             const dLat = airport.lat - plane.lat;
             const dLon = (airport.lon - plane.lon) * Math.cos(plane.lat * Math.PI / 180);
             const distNmToAirport = Math.sqrt(dLat * dLat + dLon * dLon) * 60;
