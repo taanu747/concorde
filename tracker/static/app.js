@@ -498,3 +498,163 @@ const updateAircraft = async () => {
 // Initial fetch and set interval for polling every 1 second
 updateAircraft();
 setInterval(updateAircraft, 1000);
+
+// --- History & Search Feature ---
+const searchBar = document.getElementById('search-bar');
+const searchResults = document.getElementById('search-results');
+let searchTimeout;
+let historicalPathLayer = null;
+let historicalMarker = null;
+
+if (searchBar && searchResults) {
+    searchBar.addEventListener('input', (e) => {
+        clearTimeout(searchTimeout);
+        const query = e.target.value.trim();
+        
+        if (query.length < 2) {
+            searchResults.style.display = 'none';
+            return;
+        }
+        
+        searchTimeout = setTimeout(async () => {
+            try {
+                const res = await fetch(`/api/search?query=${query}`);
+                const data = await res.json();
+                
+                if (data.length === 0) {
+                    searchResults.innerHTML = '<div class="search-result-item"><div class="search-result-details">No aircraft found</div></div>';
+                    searchResults.style.display = 'block';
+                    return;
+                }
+                
+                searchResults.innerHTML = data.map(plane => `
+                    <div class="search-result-item" data-hex="${plane.hex}">
+                        <div class="search-result-callsign">${plane.callsign || 'Unknown'} <span style="font-size: 0.7em; color: #94a3b8;">(${plane.hex})</span></div>
+                        <div class="search-result-details">Last seen: ${plane.last_seen} UTC</div>
+                        <div class="search-result-details">Alt: ${Math.round(plane.altitude || 0)} ft</div>
+                    </div>
+                `).join('');
+                
+                searchResults.style.display = 'block';
+                
+                // Add click listeners to items
+                document.querySelectorAll('.search-result-item[data-hex]').forEach(item => {
+                    item.addEventListener('click', () => {
+                        const hex = item.getAttribute('data-hex');
+                        loadAircraftHistory(hex);
+                        searchResults.style.display = 'none';
+                        searchBar.value = '';
+                    });
+                });
+                
+            } catch (error) {
+                console.error('Search failed:', error);
+            }
+        }, 300);
+    });
+
+    // Close results when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('#search-container')) {
+            searchResults.style.display = 'none';
+        }
+    });
+}
+
+async function loadAircraftHistory(hex) {
+    try {
+        const res = await fetch(`/api/history?hex=${hex}`);
+        const data = await res.json();
+        
+        if (data.length === 0) return;
+        
+        if (historicalPathLayer) {
+            map.removeLayer(historicalPathLayer);
+            historicalPathLayer = null;
+        }
+        if (historicalMarker) {
+            map.removeLayer(historicalMarker);
+            historicalMarker = null;
+        }
+        
+        // Extract latlngs (ensure lat/lon are not null)
+        const latlngs = data.filter(pt => pt.lat !== null && pt.lon !== null).map(pt => [pt.lat, pt.lon]);
+        
+        if (latlngs.length > 0) {
+            historicalPathLayer = L.polyline(latlngs, {
+                color: '#eab308', // Yellow
+                weight: 3,
+                opacity: 0.9,
+                dashArray: null // Solid line for history
+            }).addTo(map);
+            
+            // Pan to the most recent position
+            const latestPos = latlngs[latlngs.length - 1];
+            map.flyTo(latestPos, 11, { duration: 1.5 });
+            
+            // If we have the live marker, open its popup
+            if (aircraftMarkers[hex]) {
+                aircraftMarkers[hex].openPopup();
+            } else {
+                // Extract exact heading from the last known data point, or fallback to calculating it
+                let heading = 0;
+                const validPoints = data.filter(pt => pt.lat !== null && pt.lon !== null);
+                if (validPoints.length > 0) {
+                    const lastPt = validPoints[validPoints.length - 1];
+                    if (lastPt.heading !== null && lastPt.heading !== undefined) {
+                        heading = lastPt.heading;
+                    } else if (validPoints.length >= 2) {
+                        // Fallback to GPS coordinate math for older database entries
+                        let p1 = null;
+                        const p2 = lastPt;
+                        // Iterate backwards to find a distinct point
+                        for (let i = validPoints.length - 2; i >= 0; i--) {
+                            if (validPoints[i].lat !== p2.lat || validPoints[i].lon !== p2.lon) {
+                                p1 = validPoints[i];
+                                break;
+                            }
+                        }
+                        
+                        if (p1) {
+                            const dLon = (p2.lon - p1.lon) * Math.cos(p1.lat * Math.PI / 180);
+                            const dLat = p2.lat - p1.lat;
+                            heading = Math.atan2(dLon, dLat) * 180 / Math.PI;
+                            heading = (heading + 360) % 360;
+                        }
+                    }
+                }
+
+                // Add a temporary gray marker for the last known position
+                const svgPath = PLANE_PATHS['narrow']; 
+                const svgDataUriRaw = `data:image/svg+xml;utf8,%3Csvg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" fill="%2364748b" stroke="%23334155" stroke-linejoin="round"%3E%3Cpath d="${svgPath}" stroke-width="16" /%3E%3C/svg%3E`;
+                const svgDataUri = svgDataUriRaw.replace(/"/g, '%22');
+                
+                const offlineIcon = L.divIcon({
+                    className: 'custom-plane-icon',
+                    html: `<div class="plane-icon" style="transform: rotate(${heading}deg); background-image: url('${svgDataUri}'); opacity: 0.8;"></div>`,
+                    iconSize: [32, 32],
+                    iconAnchor: [16, 16],
+                    popupAnchor: [0, -16]
+                });
+
+                historicalMarker = L.marker(latestPos, { icon: offlineIcon, zIndexOffset: 1000 }).addTo(map);
+                
+                historicalMarker.bindPopup(`<div style="color: #94a3b8; font-family: 'Inter', sans-serif; padding: 5px; text-align: center;"><b>${hex}</b><br><span style="font-size: 0.85em;">Offline. Last known location.</span></div>`).openPopup();
+            }
+        }
+    } catch (error) {
+        console.error('Failed to load history:', error);
+    }
+}
+
+// Clear historical path when clicking on the map (off a plane)
+map.on('click', () => {
+    if (historicalPathLayer) {
+        map.removeLayer(historicalPathLayer);
+        historicalPathLayer = null;
+    }
+    if (historicalMarker) {
+        map.removeLayer(historicalMarker);
+        historicalMarker = null;
+    }
+});

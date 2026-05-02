@@ -4,7 +4,9 @@ import csv
 import time
 import urllib.request
 import shutil
-from flask import Flask, jsonify, render_template
+import sqlite3
+import threading
+from flask import Flask, jsonify, render_template, request
 
 app = Flask(__name__)
 
@@ -14,6 +16,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 AIRCRAFT_FILE = os.path.join(BASE_DIR, 'history', 'aircraft.json')
 DB_FILE = os.path.join(BASE_DIR, 'aircraftDatabase.csv')
 DB_URL = "https://opensky-network.org/datasets/metadata/aircraftDatabase.csv"
+SQLITE_DB_FILE = os.path.join(BASE_DIR, 'aircraft_history.db')
 
 # Global in-memory dictionary for fast lookups
 aircraft_db = {}
@@ -55,6 +58,69 @@ def load_aircraft_db():
 
 # Load database on startup
 load_aircraft_db()
+
+def init_db():
+    with sqlite3.connect(SQLITE_DB_FILE) as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS aircraft_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                hex TEXT,
+                callsign TEXT,
+                lat REAL,
+                lon REAL,
+                altitude REAL,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                heading REAL
+            )
+        ''')
+        try:
+            cursor.execute('ALTER TABLE aircraft_history ADD COLUMN heading REAL')
+        except sqlite3.OperationalError:
+            pass
+        # Create indexes for faster search
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_hex ON aircraft_history(hex)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_callsign ON aircraft_history(callsign)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_timestamp ON aircraft_history(timestamp)')
+        conn.commit()
+
+def record_aircraft_data():
+    while True:
+        try:
+            if os.path.exists(AIRCRAFT_FILE):
+                with open(AIRCRAFT_FILE, 'r') as f:
+                    data = json.load(f)
+                
+                if 'aircraft' in data:
+                    with sqlite3.connect(SQLITE_DB_FILE) as conn:
+                        cursor = conn.cursor()
+                        for plane in data['aircraft']:
+                            seen = plane.get('seen', 0)
+                            if seen < 15:
+                                hex_code = plane.get('hex', '').lower()
+                                callsign = plane.get('flight', '').strip()
+                                lat = plane.get('lat')
+                                lon = plane.get('lon')
+                                altitude = plane.get('alt_baro') or plane.get('alt_geom')
+                                heading = plane.get('track')
+                                
+                                if lat is not None and lon is not None:
+                                    cursor.execute('''
+                                        INSERT INTO aircraft_history (hex, callsign, lat, lon, altitude, heading)
+                                        VALUES (?, ?, ?, ?, ?, ?)
+                                    ''', (hex_code, callsign, lat, lon, altitude, heading))
+                        
+                        # Cleanup old data (> 24 hours)
+                        cursor.execute("DELETE FROM aircraft_history WHERE timestamp <= datetime('now', '-24 hours')")
+                        conn.commit()
+        except Exception as e:
+            print(f"Error recording aircraft data: {e}")
+        
+        time.sleep(5)
+
+init_db()
+recorder_thread = threading.Thread(target=record_aircraft_data, daemon=True)
+recorder_thread.start()
 # AviationStack API Configuration 
 AVIATIONSTACK_API_KEY = "f6f24b7474f05dbbfe61a7fefcd0fef4"
 flight_route_cache = {}
@@ -148,6 +214,54 @@ def get_aircraft_data():
     except json.JSONDecodeError:
         # File might be mid-write by dump1090
         return jsonify({"error": "Failed to parse JSON (file may be mid-update)"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/search')
+def search_aircraft():
+    query = request.args.get('query', '').strip()
+    if not query:
+        return jsonify([])
+    
+    try:
+        with sqlite3.connect(SQLITE_DB_FILE) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            search_term = f"%{query}%"
+            # Get latest position for each matching plane
+            cursor.execute('''
+                SELECT hex, callsign, lat, lon, altitude, max(timestamp) as last_seen 
+                FROM aircraft_history 
+                WHERE callsign LIKE ? OR hex LIKE ? 
+                GROUP BY hex 
+                ORDER BY last_seen DESC 
+                LIMIT 50
+            ''', (search_term, search_term))
+            
+            results = [dict(row) for row in cursor.fetchall()]
+            return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/history')
+def get_aircraft_history():
+    hex_code = request.args.get('hex', '').strip().lower()
+    if not hex_code:
+        return jsonify([])
+        
+    try:
+        with sqlite3.connect(SQLITE_DB_FILE) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT lat, lon, altitude, heading, timestamp 
+                FROM aircraft_history 
+                WHERE hex = ? 
+                ORDER BY timestamp ASC
+            ''', (hex_code,))
+            
+            results = [dict(row) for row in cursor.fetchall()]
+            return jsonify(results)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
