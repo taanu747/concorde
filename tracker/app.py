@@ -20,6 +20,8 @@ SQLITE_DB_FILE = os.path.join(BASE_DIR, 'aircraft_history.db')
 
 # Global in-memory dictionary for fast lookups
 aircraft_db = {}
+latest_aircraft_data = {}
+FEEDER_SECRET = os.environ.get("FEEDER_SECRET", "changeme")
 
 def load_aircraft_db():
     global aircraft_db
@@ -87,11 +89,8 @@ def init_db():
 def record_aircraft_data():
     while True:
         try:
-            if os.path.exists(AIRCRAFT_FILE):
-                with open(AIRCRAFT_FILE, 'r') as f:
-                    data = json.load(f)
-                
-                if 'aircraft' in data:
+            data = latest_aircraft_data
+            if data and 'aircraft' in data:
                     with sqlite3.connect(SQLITE_DB_FILE) as conn:
                         cursor = conn.cursor()
                         for plane in data['aircraft']:
@@ -179,15 +178,26 @@ def index():
     # Pass a timestamp parameter to bust browser cache for static files
     return render_template('index.html', ts=int(time.time()))
 
+@app.route('/api/update', methods=['POST'])
+def update_aircraft_data():
+    """Receive live data pushed from local feeder script."""
+    secret = request.headers.get('Authorization') or request.args.get('secret')
+    if secret != FEEDER_SECRET and secret != f"Bearer {FEEDER_SECRET}":
+        return jsonify({"error": "Unauthorized"}), 401
+        
+    global latest_aircraft_data
+    latest_aircraft_data = request.json
+    return jsonify({"status": "success", "aircraft_count": len(request.json.get('aircraft', []))})
+
 @app.route('/api/data')
 def get_aircraft_data():
-    """Read aircraft.json, filter stale data, and return as JSON."""
-    if not os.path.exists(AIRCRAFT_FILE):
-        return jsonify({"error": f"File {AIRCRAFT_FILE} not found."}), 404
+    """Return live aircraft data from memory, enriched with database details."""
+    # Create a shallow copy to safely iterate
+    data = dict(latest_aircraft_data) if latest_aircraft_data else {}
+    if not data:
+        return jsonify({"aircraft": []})
 
     try:
-        with open(AIRCRAFT_FILE, 'r') as f:
-            data = json.load(f)
             
         # Filter out planes that haven't been seen recently.
         # dump1090 adds a 'seen' or 'seen_pos' field indicating seconds since last update.
@@ -211,9 +221,6 @@ def get_aircraft_data():
             data['aircraft'] = active_aircraft
             
         return jsonify(data)
-    except json.JSONDecodeError:
-        # File might be mid-write by dump1090
-        return jsonify({"error": "Failed to parse JSON (file may be mid-update)"}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
