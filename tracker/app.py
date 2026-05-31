@@ -21,6 +21,7 @@ SQLITE_DB_FILE = os.path.join(BASE_DIR, 'aircraft_history.db')
 # Global in-memory dictionary for fast lookups
 aircraft_db = {}
 latest_aircraft_data = {}
+last_db_write_time = 0
 FEEDER_SECRET = os.environ.get("FEEDER_SECRET", "changeme")
 
 def load_aircraft_db():
@@ -86,40 +87,7 @@ def init_db():
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_timestamp ON aircraft_history(timestamp)')
         conn.commit()
 
-def record_aircraft_data():
-    while True:
-        try:
-            data = latest_aircraft_data
-            if data and 'aircraft' in data:
-                    with sqlite3.connect(SQLITE_DB_FILE) as conn:
-                        cursor = conn.cursor()
-                        for plane in data['aircraft']:
-                            seen = plane.get('seen', 0)
-                            if seen < 15:
-                                hex_code = plane.get('hex', '').lower()
-                                callsign = plane.get('flight', '').strip()
-                                lat = plane.get('lat')
-                                lon = plane.get('lon')
-                                altitude = plane.get('alt_baro') or plane.get('alt_geom')
-                                heading = plane.get('track')
-                                
-                                if lat is not None and lon is not None:
-                                    cursor.execute('''
-                                        INSERT INTO aircraft_history (hex, callsign, lat, lon, altitude, heading)
-                                        VALUES (?, ?, ?, ?, ?, ?)
-                                    ''', (hex_code, callsign, lat, lon, altitude, heading))
-                        
-                        # Cleanup old data (> 24 hours)
-                        cursor.execute("DELETE FROM aircraft_history WHERE timestamp <= datetime('now', '-24 hours')")
-                        conn.commit()
-        except Exception as e:
-            print(f"Error recording aircraft data: {e}")
-        
-        time.sleep(5)
-
 init_db()
-recorder_thread = threading.Thread(target=record_aircraft_data, daemon=True)
-recorder_thread.start()
 # AviationStack API Configuration 
 AVIATIONSTACK_API_KEY = "f6f24b7474f05dbbfe61a7fefcd0fef4"
 flight_route_cache = {}
@@ -185,8 +153,38 @@ def update_aircraft_data():
     if secret != FEEDER_SECRET and secret != f"Bearer {FEEDER_SECRET}":
         return jsonify({"error": "Unauthorized"}), 401
         
-    global latest_aircraft_data
+    global latest_aircraft_data, last_db_write_time
     latest_aircraft_data = request.json
+    
+    current_time = time.time()
+    if current_time - last_db_write_time >= 5:
+        last_db_write_time = current_time
+        try:
+            if latest_aircraft_data and 'aircraft' in latest_aircraft_data:
+                with sqlite3.connect(SQLITE_DB_FILE) as conn:
+                    cursor = conn.cursor()
+                    for plane in latest_aircraft_data['aircraft']:
+                        seen = plane.get('seen', 0)
+                        if seen < 15:
+                            hex_code = plane.get('hex', '').lower()
+                            callsign = plane.get('flight', '').strip()
+                            lat = plane.get('lat')
+                            lon = plane.get('lon')
+                            altitude = plane.get('alt_baro') or plane.get('alt_geom')
+                            heading = plane.get('track')
+                            
+                            if lat is not None and lon is not None:
+                                cursor.execute('''
+                                    INSERT INTO aircraft_history (hex, callsign, lat, lon, altitude, heading)
+                                    VALUES (?, ?, ?, ?, ?, ?)
+                                ''', (hex_code, callsign, lat, lon, altitude, heading))
+                    
+                    # Cleanup old data (> 24 hours)
+                    cursor.execute("DELETE FROM aircraft_history WHERE timestamp <= datetime('now', '-24 hours')")
+                    conn.commit()
+        except Exception as e:
+            print(f"Error saving to DB: {e}")
+
     return jsonify({"status": "success", "aircraft_count": len(request.json.get('aircraft', []))})
 
 @app.route('/api/data')
