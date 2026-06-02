@@ -74,9 +74,8 @@ html {
     accent-color: #10b981;
 }
 
-#theme-control {
+#heatmap-control, #deviations-control, #theme-control {
     position: absolute;
-    top: 65px;
     left: 60px;
     z-index: 1000;
     background: rgba(15, 23, 42, 0.8);
@@ -97,8 +96,12 @@ html {
     transition: background 0.2s;
 }
 
-#theme-control:hover { background: rgba(30, 41, 59, 0.9); }
-#theme-control input { cursor: pointer; accent-color: #10b981; }
+#heatmap-control { top: 65px; }
+#deviations-control { top: 110px; }
+#theme-control { top: 155px; }
+
+#heatmap-control:hover, #deviations-control:hover, #theme-control:hover { background: rgba(30, 41, 59, 0.9); }
+#heatmap-control input, #deviations-control input, #theme-control input { cursor: pointer; accent-color: #10b981; }
 
 /* Retro Theme popup styles (darker, matrix-y) */
 body.retro-theme .leaflet-popup-content-wrapper {

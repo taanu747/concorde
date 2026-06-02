@@ -658,3 +658,72 @@ map.on('click', () => {
         historicalMarker = null;
     }
 });
+
+// --- Analytics: Heatmap ---
+let heatmapLayer = null;
+
+document.getElementById('heatmap-toggle').addEventListener('change', async (e) => {
+    if (e.target.checked) {
+        try {
+            const res = await fetch('/api/analytics/heatmap');
+            const data = await res.json();
+            
+            // Format for Leaflet.heat: [lat, lon, intensity]
+            const heatData = data.map(pt => [pt[0], pt[1], pt[2] * 2]);
+            
+            heatmapLayer = L.heatLayer(heatData, {
+                radius: 15,
+                blur: 20,
+                maxZoom: 12,
+                gradient: { 0.4: 'blue', 0.6: 'cyan', 0.7: 'lime', 0.8: 'yellow', 1.0: 'red' }
+            }).addTo(map);
+        } catch (err) {
+            console.error("Failed to load heatmap", err);
+        }
+    } else {
+        if (heatmapLayer) {
+            map.removeLayer(heatmapLayer);
+            heatmapLayer = null;
+        }
+    }
+});
+
+// --- Analytics: Weather Deviations ---
+let deviationsLayerGroup = L.layerGroup().addTo(map);
+
+document.getElementById('deviations-toggle').addEventListener('change', async (e) => {
+    if (e.target.checked) {
+        try {
+            const res = await fetch('/api/analytics/weather-deviations');
+            const data = await res.json();
+            
+            data.forEach(dev => {
+                let reason = dev.hc > 15 ? `Heading change of ${Math.round(dev.hc)}&deg;` : `Altitude change of ${Math.round(dev.ac)} ft`;
+                
+                const marker = L.circleMarker([dev.lat, dev.lon], {
+                    radius: 8,
+                    fillColor: "#ef4444",
+                    color: "#000",
+                    weight: 1,
+                    opacity: 1,
+                    fillOpacity: 0.8
+                });
+                
+                marker.bindPopup(`
+                    <div style="font-family:'Inter',sans-serif;">
+                        <strong style="color:#ef4444;">Deviation Detected</strong><br>
+                        Flight: ${dev.callsign || dev.hex}<br>
+                        Reason: ${reason}<br>
+                        <button onclick="loadAircraftHistory('${dev.hex}')" style="margin-top:5px; padding:3px 8px; background:#10b981; color:#fff; border:none; border-radius:4px; cursor:pointer;">View Path</button>
+                    </div>
+                `);
+                
+                deviationsLayerGroup.addLayer(marker);
+            });
+        } catch (err) {
+            console.error("Failed to load deviations", err);
+        }
+    } else {
+        deviationsLayerGroup.clearLayers();
+    }
+});

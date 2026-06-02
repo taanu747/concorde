@@ -179,8 +179,8 @@ def update_aircraft_data():
                                     VALUES (?, ?, ?, ?, ?, ?)
                                 ''', (hex_code, callsign, lat, lon, altitude, heading))
                     
-                    # Cleanup old data (> 24 hours)
-                    cursor.execute("DELETE FROM aircraft_history WHERE timestamp <= datetime('now', '-24 hours')")
+                    # Cleanup old data (> 7 days)
+                    cursor.execute("DELETE FROM aircraft_history WHERE timestamp <= datetime('now', '-7 days')")
                     conn.commit()
         except Exception as e:
             print(f"Error saving to DB: {e}")
@@ -264,6 +264,53 @@ def get_aircraft_history():
                 WHERE hex = ? 
                 ORDER BY timestamp ASC
             ''', (hex_code,))
+            
+            results = [dict(row) for row in cursor.fetchall()]
+            return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/analytics/heatmap')
+def get_heatmap_data():
+    try:
+        with sqlite3.connect(SQLITE_DB_FILE) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            # 24 hour heatmap to ensure good performance, rounding to 2 decimals clusters the points
+            cursor.execute('''
+                SELECT ROUND(lat, 2) as r_lat, ROUND(lon, 2) as r_lon, COUNT(*) as intensity 
+                FROM aircraft_history 
+                WHERE timestamp >= datetime('now', '-24 hours')
+                GROUP BY r_lat, r_lon
+            ''')
+            
+            # Format as [lat, lon, intensity] array for leaflet.heat
+            results = [[row['r_lat'], row['r_lon'], row['intensity']] for row in cursor.fetchall()]
+            return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/analytics/weather-deviations')
+def get_weather_deviations():
+    try:
+        with sqlite3.connect(SQLITE_DB_FILE) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            # Scan last 3 hours for abrupt heading (>15 deg) or altitude (>1000 ft) changes
+            cursor.execute('''
+                WITH changes AS (
+                    SELECT hex, callsign, lat, lon, heading, altitude, timestamp,
+                           ABS(heading - LAG(heading) OVER (PARTITION BY hex ORDER BY timestamp)) as hc,
+                           ABS(altitude - LAG(altitude) OVER (PARTITION BY hex ORDER BY timestamp)) as ac
+                    FROM aircraft_history
+                    WHERE timestamp >= datetime('now', '-3 hours')
+                )
+                SELECT hex, callsign, lat, lon, hc, ac, timestamp
+                FROM changes
+                WHERE (hc > 15 AND hc < 345) OR (ac > 1000)
+                ORDER BY timestamp DESC
+                LIMIT 500
+            ''')
             
             results = [dict(row) for row in cursor.fetchall()]
             return jsonify(results)

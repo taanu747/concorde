@@ -36,7 +36,18 @@
     <!-- Weather Controls -->
     <label id="weather-control" for="weather-toggle">
         <input type="checkbox" id="weather-toggle">
-        Weather Mode
+        Weather Radar
+    </label>
+
+    <!-- Analytics Controls -->
+    <label id="heatmap-control" for="heatmap-toggle">
+        <input type="checkbox" id="heatmap-toggle">
+        Heatmap (24h)
+    </label>
+    
+    <label id="deviations-control" for="deviations-toggle">
+        <input type="checkbox" id="deviations-toggle">
+        Deviations (3h)
     </label>
 
     <!-- Theme Controls -->
@@ -51,6 +62,9 @@
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <!-- Leaflet.heat plugin -->
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 
     <!-- Custom JS -->
     <script src="{{ url_for('static', filename='app.js') }}?v={{ ts }}"></script>
