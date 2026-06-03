@@ -669,11 +669,13 @@ document.getElementById('heatmap-toggle').addEventListener('change', async (e) =
             const data = await res.json();
             
             // Format for Leaflet.heat: [lat, lon, intensity]
-            const heatData = data.map(pt => [pt[0], pt[1], pt[2] * 2]);
+            // Multiplier reduced to make it less sensitive
+            const heatData = data.map(pt => [pt[0], pt[1], pt[2] * 0.2]);
             
             heatmapLayer = L.heatLayer(heatData, {
                 radius: 15,
                 blur: 20,
+                max: 5, // Higher max means more overlapping planes required to turn red
                 maxZoom: 12,
                 gradient: { 0.4: 'blue', 0.6: 'cyan', 0.7: 'lime', 0.8: 'yellow', 1.0: 'red' }
             }).addTo(map);

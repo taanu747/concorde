@@ -276,11 +276,11 @@ def get_heatmap_data():
         with sqlite3.connect(SQLITE_DB_FILE) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
-            # 24 hour heatmap to ensure good performance, rounding to 2 decimals clusters the points
+            # 7 day heatmap to ensure good performance, rounding to 2 decimals clusters the points
             cursor.execute('''
                 SELECT ROUND(lat, 2) as r_lat, ROUND(lon, 2) as r_lon, COUNT(*) as intensity 
                 FROM aircraft_history 
-                WHERE timestamp >= datetime('now', '-24 hours')
+                WHERE timestamp >= datetime('now', '-7 days')
                 GROUP BY r_lat, r_lon
             ''')
             
