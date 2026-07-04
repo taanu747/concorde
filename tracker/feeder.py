@@ -1,35 +1,37 @@
 import time
 import json
 import requests
-import os
 import argparse
 
 def main():
-    parser = argparse.ArgumentParser(description="Push local dump1090 data to Render backend.")
-    parser.add_argument("--url", default="https://flight-tracker-8qg2.onrender.com", help="Render URL")
+    parser = argparse.ArgumentParser(description="Push local dump1090 data to Cloud backend.")
+    parser.add_argument("--target-url", default="https://flight-tracker-8qg2.onrender.com", help="Cloud backend URL")
     parser.add_argument("--secret", default="changeme", help="Secret token for authentication")
-    parser.add_argument("--file", default="history/aircraft.json", help="Path to aircraft.json")
+    parser.add_argument("--source-url", default="http://localhost:8080/data/aircraft.json", help="Local dump1090 JSON URL")
     parser.add_argument("--interval", type=float, default=1.5, help="Polling interval in seconds")
     args = parser.parse_args()
 
-    endpoint = f"{args.url.rstrip('/')}/api/update"
+    endpoint = f"{args.target_url.rstrip('/')}/api/update"
     
     print(f"Starting feeder...")
     print(f"Target: {endpoint}")
-    print(f"File:   {args.file}")
+    print(f"Source: {args.source_url}")
     
     while True:
         try:
-            if not os.path.exists(args.file):
-                print(f"Waiting for {args.file} to be created by dump1090...")
+            # Fetch data from local dump1090
+            try:
+                source_response = requests.get(args.source_url, timeout=2)
+                source_response.raise_for_status()
+                data = source_response.json()
+            except requests.RequestException as e:
+                print(f"[{time.strftime('%H:%M:%S')}] Waiting for dump1090 at {args.source_url} (Error: {e})")
                 time.sleep(args.interval)
                 continue
-                
-            with open(args.file, 'r') as f:
-                data = json.load(f)
-                
+
             plane_count = len(data.get("aircraft", []))
                 
+            # Push data to cloud backend
             response = requests.post(
                 endpoint,
                 json=data,
@@ -43,10 +45,9 @@ def main():
                 print(f"[{time.strftime('%H:%M:%S')}] Failed: HTTP {response.status_code} - {response.text.strip()}")
                 
         except json.JSONDecodeError:
-            # File might be mid-write by dump1090
-            pass
+            print(f"[{time.strftime('%H:%M:%S')}] Invalid JSON received from source.")
         except requests.RequestException as e:
-            print(f"[{time.strftime('%H:%M:%S')}] Network error: {e}")
+            print(f"[{time.strftime('%H:%M:%S')}] Network error when pushing to target: {e}")
         except Exception as e:
             print(f"[{time.strftime('%H:%M:%S')}] Error: {e}")
             
