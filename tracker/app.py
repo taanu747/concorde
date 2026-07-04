@@ -84,10 +84,7 @@ def init_db():
                     heading REAL
                 )
             ''')
-        try:
-            cursor.execute('ALTER TABLE aircraft_history ADD COLUMN heading REAL')
-        except Exception:
-            pass
+
         # Create stateless tables
         if DB_TYPE == "postgres":
             cursor.execute('''
