@@ -295,13 +295,14 @@ def search_aircraft():
     try:
         with get_db_connection() as conn:
             search_term = f"%{query}%"
-            query_sql = '''
+            query_sql = f'''
                 SELECT hex, callsign, lat, lon, altitude, timestamp as last_seen 
                 FROM (
                     SELECT hex, callsign, lat, lon, altitude, timestamp,
                            ROW_NUMBER() OVER(PARTITION BY hex ORDER BY timestamp DESC) as rn
                     FROM aircraft_history
-                    WHERE callsign LIKE ? OR hex LIKE ?
+                    WHERE callsign { 'ILIKE' if DB_TYPE == 'postgres' else 'LIKE' } ? 
+                       OR hex { 'ILIKE' if DB_TYPE == 'postgres' else 'LIKE' } ?
                 ) t
                 WHERE rn = 1
                 ORDER BY last_seen DESC 
