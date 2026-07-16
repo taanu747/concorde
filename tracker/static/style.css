@@ -343,3 +343,113 @@ body:not(.is-zooming) .leaflet-marker-icon.custom-plane-icon {
     font-size: 0.75rem;
     color: #94a3b8;
 }
+
+#history-control-container {
+    position: absolute;
+    top: 75px;
+    right: 20px;
+    z-index: 1000;
+    width: 280px;
+    background: rgba(15, 23, 42, 0.8);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #f8fafc;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+#history-control-container h3 {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #10b981;
+}
+
+#history-time-input {
+    width: 100%;
+    padding: 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(15, 23, 42, 0.6);
+    color: #f8fafc;
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+#history-time-input:focus {
+    border-color: #10b981;
+}
+
+.history-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.history-actions button {
+    flex: 1;
+    padding: 8px;
+    border-radius: 6px;
+    border: none;
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+}
+
+#history-submit-btn {
+    background: #10b981;
+    color: #0f172a;
+}
+
+#history-submit-btn:hover {
+    background: #059669;
+}
+
+#history-submit-btn:disabled {
+    background: rgba(16, 185, 129, 0.3);
+    color: rgba(248, 250, 252, 0.5);
+    cursor: not-allowed;
+}
+
+#history-submit-btn:active, #history-live-btn:active {
+    transform: scale(0.98);
+}
+
+#history-live-btn {
+    background: rgba(239, 68, 68, 0.2);
+    color: #fca5a5;
+    border: 1px solid rgba(239, 68, 68, 0.4);
+}
+
+#history-live-btn:hover {
+    background: rgba(239, 68, 68, 0.3);
+}
+
+/* Historical indicator dot */
+.dot.historical {
+    background-color: #3b82f6;
+    /* Blue 500 */
+    box-shadow: 0 0 8px #3b82f6;
+    animation: pulse-historical 1.5s infinite;
+}
+
+@keyframes pulse-historical {
+    0% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.4;
+    }
+    100% {
+        opacity: 1;
+    }
+}

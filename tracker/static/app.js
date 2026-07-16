@@ -367,10 +367,13 @@ const generatePopupHTML = (plane) => {
     `;
 };
 
-// Main function to fetch data and update the map
-const updateAircraft = async () => {
+let isLiveMode = true;
+let historyTime = null;
+
+// Helper to fetch data from a given URL and update the map
+const fetchAndRender = async (url) => {
     try {
-        const response = await fetch('/api/data');
+        const response = await fetch(url);
         if (!response.ok) throw new Error('Network response was not ok');
 
         const data = await response.json();
@@ -391,7 +394,7 @@ const updateAircraft = async () => {
                         // Update existing marker
                         const marker = aircraftMarkers[plane.hex];
 
-                        // Prevent the 1-second backend sync from wiping our asynchronously fetched Origin/Destination strings!
+                        // Prevent the sync from wiping our asynchronously fetched Origin/Destination strings!
                         if (marker.planeData.routeFetched) {
                             plane.routeFetched = marker.planeData.routeFetched;
                             plane.routeStr = marker.planeData.routeStr;
@@ -487,17 +490,94 @@ const updateAircraft = async () => {
             counterUI.textContent = `${activeHexes.size} Aircraft`;
         }
 
-        document.querySelector('.dot').className = 'dot live';
+        // Update indicator dot class
+        const dot = document.querySelector('.dot');
+        if (dot) {
+            dot.className = isLiveMode ? 'dot live' : 'dot historical';
+        }
 
     } catch (error) {
         console.error('Error fetching aircraft data:', error);
-        document.querySelector('.dot').className = 'dot offline';
+        const dot = document.querySelector('.dot');
+        if (dot && isLiveMode) {
+            dot.className = 'dot offline';
+        }
     }
+};
+
+// Main function to fetch data and update the map
+const updateAircraft = async () => {
+    if (!isLiveMode) return;
+    await fetchAndRender('/api/data');
 };
 
 // Initial fetch and set interval for polling every 1 second
 updateAircraft();
 setInterval(updateAircraft, 1000);
+
+// Set up UI Event listeners for Time Travel
+const historySubmitBtn = document.getElementById('history-submit-btn');
+const historyLiveBtn = document.getElementById('history-live-btn');
+const historyTimeInput = document.getElementById('history-time-input');
+
+if (historySubmitBtn && historyLiveBtn && historyTimeInput) {
+    // Default to current local time in datetime input for convenience
+    const now = new Date();
+    const localISOString = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    historyTimeInput.value = localISOString;
+
+    historySubmitBtn.addEventListener('click', async () => {
+        const timeVal = historyTimeInput.value;
+        if (!timeVal) {
+            alert('Please select a valid date and time.');
+            return;
+        }
+        
+        isLiveMode = false;
+        historyTime = timeVal;
+        
+        // Show status dot and text for historical mode (replacing 'T' with space)
+        const statusIndicator = document.getElementById('status-indicator');
+        if (statusIndicator) {
+            statusIndicator.innerHTML = `
+                <span id="aircraft-count" style="margin-right: 12px; font-weight: 600; color: #cbd5e1;">0 Aircraft</span>
+                <span class="dot historical"></span> Historical Mode (${timeVal.replace('T', ' ')})
+            `;
+        }
+        
+        historyLiveBtn.style.display = 'inline-block';
+        historySubmitBtn.textContent = 'Querying...';
+        historySubmitBtn.disabled = true;
+
+        try {
+            await fetchAndRender(`/api/historical-data?timestamp=${encodeURIComponent(timeVal)}`);
+        } catch (err) {
+            alert('Error loading historical data: ' + err.message);
+        } finally {
+            historySubmitBtn.textContent = 'Query Time';
+            historySubmitBtn.disabled = false;
+        }
+    });
+
+    historyLiveBtn.addEventListener('click', async () => {
+        isLiveMode = true;
+        historyTime = null;
+        
+        // Restore status indicator to live state
+        const statusIndicator = document.getElementById('status-indicator');
+        if (statusIndicator) {
+            statusIndicator.innerHTML = `
+                <span id="aircraft-count" style="margin-right: 12px; font-weight: 600; color: #cbd5e1;">0 Aircraft</span>
+                <span class="dot live"></span> Live Data
+            `;
+        }
+        
+        historyLiveBtn.style.display = 'none';
+        
+        // Instantly poll live data
+        await updateAircraft();
+    });
+}
 
 // --- History & Search Feature ---
 const searchBar = document.getElementById('search-bar');

@@ -374,6 +374,70 @@ def get_weather_deviations():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/historical-data')
+def get_historical_aircraft_data():
+    """Return historical aircraft data from a specific UTC timestamp."""
+    target_time_str = request.args.get('timestamp')
+    if not target_time_str:
+        return jsonify({"error": "No timestamp provided"}), 400
+        
+    # Standardize HTML datetime-local format: 'YYYY-MM-DDTHH:MM' -> 'YYYY-MM-DD HH:MM:00'
+    target_time_str = target_time_str.replace('T', ' ')
+    if len(target_time_str) == 16:  # YYYY-MM-DD HH:MM
+        target_time_str += ":00"
+        
+    try:
+        import datetime
+        try:
+            dt = datetime.datetime.strptime(target_time_str, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            dt = datetime.datetime.strptime(target_time_str, "%Y-%m-%d %H:%M")
+            
+        start_dt = dt - datetime.timedelta(seconds=30)
+        end_dt = dt
+        
+        start_str = start_dt.strftime("%Y-%m-%d %H:%M:%S")
+        end_str = end_dt.strftime("%Y-%m-%d %H:%M:%S")
+        
+        with get_db_connection() as conn:
+            query_sql = """
+                SELECT hex, callsign as flight, lat, lon, altitude as alt_baro, heading as track, timestamp
+                FROM (
+                    SELECT hex, callsign, lat, lon, altitude, heading, timestamp,
+                           ROW_NUMBER() OVER(PARTITION BY hex ORDER BY timestamp DESC) as rn
+                    FROM aircraft_history
+                    WHERE timestamp >= ? AND timestamp <= ?
+                ) t
+                WHERE rn = 1
+            """
+            if DB_TYPE == "postgres":
+                query_sql = query_sql.replace("?", "%s")
+                
+            results = execute_query(conn, query_sql, (start_str, end_str))
+            
+            # Enrich with metadata
+            if results:
+                hexes = [r['hex'].lower() for r in results if r.get('hex')]
+                if hexes:
+                    placeholders = ','.join(['%s' if DB_TYPE == 'postgres' else '?'] * len(hexes))
+                    meta_query = f"SELECT icao24, registration, model, typecode, operator FROM aircraft_metadata WHERE icao24 IN ({placeholders})"
+                    meta_res = execute_query(conn, meta_query, tuple(hexes))
+                    if meta_res:
+                        metadata_map = {row['icao24']: row for row in meta_res}
+                        for r in results:
+                            hex_code = r['hex'].lower()
+                            db_info = metadata_map.get(hex_code)
+                            if db_info:
+                                if db_info['registration']: r['registration'] = db_info['registration']
+                                if db_info['model']: r['model'] = db_info['model']
+                                if db_info['typecode']: r['typecode'] = db_info['typecode']
+                                if db_info['operator']: r['operator'] = db_info['operator']
+                                
+            return jsonify({"aircraft": results})
+    except Exception as e:
+        print(f"Error fetching historical data: {e}")
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == '__main__':
     # Running securely on localhost port 8081 to avoid macOS AirPlay / port exhaustion collisions
     app.run(host='127.0.0.1', port=8081, debug=True)
