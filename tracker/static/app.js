@@ -517,8 +517,22 @@ setInterval(updateAircraft, 1000);
 
 // Set up UI Event listeners for Time Travel
 const historySubmitBtn = document.getElementById('history-submit-btn');
+const historyPlayBtn = document.getElementById('history-play-btn');
 const historyLiveBtn = document.getElementById('history-live-btn');
 const historyTimeInput = document.getElementById('history-time-input');
+
+let playbackInterval = null;
+
+const stopPlayback = () => {
+    if (playbackInterval) {
+        clearInterval(playbackInterval);
+        playbackInterval = null;
+    }
+    if (historyPlayBtn) {
+        historyPlayBtn.textContent = 'Play';
+        historyPlayBtn.classList.remove('playing');
+    }
+};
 
 if (historySubmitBtn && historyLiveBtn && historyTimeInput) {
     // Default to current local time in datetime input for convenience
@@ -527,6 +541,7 @@ if (historySubmitBtn && historyLiveBtn && historyTimeInput) {
     historyTimeInput.value = localISOString;
 
     historySubmitBtn.addEventListener('click', async () => {
+        stopPlayback();
         const timeVal = historyTimeInput.value;
         if (!timeVal) {
             alert('Please select a valid date and time.');
@@ -545,6 +560,7 @@ if (historySubmitBtn && historyLiveBtn && historyTimeInput) {
             `;
         }
         
+        if (historyPlayBtn) historyPlayBtn.style.display = 'inline-block';
         historyLiveBtn.style.display = 'inline-block';
         historySubmitBtn.textContent = 'Querying...';
         historySubmitBtn.disabled = true;
@@ -559,9 +575,61 @@ if (historySubmitBtn && historyLiveBtn && historyTimeInput) {
         }
     });
 
+    if (historyPlayBtn) {
+        historyPlayBtn.addEventListener('click', () => {
+            if (playbackInterval) {
+                // Pause playback
+                stopPlayback();
+            } else {
+                // Start playback
+                historyPlayBtn.textContent = 'Pause';
+                historyPlayBtn.classList.add('playing');
+                
+                playbackInterval = setInterval(async () => {
+                    const timeVal = historyTimeInput.value;
+                    if (!timeVal) {
+                        stopPlayback();
+                        return;
+                    }
+                    
+                    // Parse current time and increment by 1 minute (60,000 ms)
+                    const currentDate = new Date(timeVal);
+                    if (isNaN(currentDate.getTime())) {
+                        stopPlayback();
+                        return;
+                    }
+                    
+                    const newDate = new Date(currentDate.getTime() + 60000);
+                    // Convert back to local timezone offset-adjusted ISO string (YYYY-MM-DDTHH:MM)
+                    const localISOString = new Date(newDate.getTime() - newDate.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+                    
+                    historyTimeInput.value = localISOString;
+                    historyTime = localISOString;
+                    
+                    // Update header status text to show current playback time
+                    const statusIndicator = document.getElementById('status-indicator');
+                    if (statusIndicator) {
+                        statusIndicator.innerHTML = `
+                            <span id="aircraft-count" style="margin-right: 12px; font-weight: 600; color: #cbd5e1;">0 Aircraft</span>
+                            <span class="dot historical"></span> Historical Mode (${localISOString.replace('T', ' ')})
+                        `;
+                    }
+                    
+                    try {
+                        await fetchAndRender(`/api/historical-data?timestamp=${encodeURIComponent(localISOString)}`);
+                    } catch (err) {
+                        console.error('Error updating playback map data:', err);
+                    }
+                }, 3000); // Step forward by 1 minute every 3 seconds of real-time
+            }
+        });
+    }
+
     historyLiveBtn.addEventListener('click', async () => {
         isLiveMode = true;
         historyTime = null;
+        
+        stopPlayback();
         
         // Restore status indicator to live state
         const statusIndicator = document.getElementById('status-indicator');
@@ -572,6 +640,7 @@ if (historySubmitBtn && historyLiveBtn && historyTimeInput) {
             `;
         }
         
+        if (historyPlayBtn) historyPlayBtn.style.display = 'none';
         historyLiveBtn.style.display = 'none';
         
         // Instantly poll live data
