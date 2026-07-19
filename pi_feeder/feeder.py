@@ -8,7 +8,7 @@ def main():
     parser = argparse.ArgumentParser(description="Push Raspberry Pi dump1090 data to Cloud backend.")
     parser.add_argument("--target-url", required=True, help="Your Vercel backend URL (e.g. https://your-app.vercel.app)")
     parser.add_argument("--secret", required=True, help="Secret token for authentication")
-    # By default, dump1090-fa writes its live JSON to the Raspberry Pi's RAM disk!
+    # By default, dump1090-fa writes its live JSON to the Raspberry Pi's RAM disk
     parser.add_argument("--source-file", default="/run/dump1090-fa/aircraft.json", help="Local dump1090 JSON file path")
     parser.add_argument("--interval", type=float, default=1.5, help="Polling interval in seconds")
     args = parser.parse_args()
@@ -26,7 +26,7 @@ def main():
                 with open(args.source_file, "r") as f:
                     data = json.load(f)
             else:
-                print(f"[{time.strftime('%H:%M:%S')}] Waiting for file {args.source_file} to be created by dump1090-fa...")
+                print(f"[{time.strftime('%H:%M:%S')}] Waiting for file {args.source_file} to be created by dump1090-fa, make sure it's on")
                 time.sleep(args.interval)
                 continue
 

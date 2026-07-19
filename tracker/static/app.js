@@ -96,8 +96,8 @@ map.on('popupopen', async (e) => {
             const callsign = (plane.flight || '').trim();
             if (callsign && !plane.routeFetched) {
                 // Instantly lock the switch so that if the network fails/throws, we don't infinitely retry and crash the Mac's socket pool!
-                plane.routeFetched = true; 
-                
+                plane.routeFetched = true;
+
                 // Instantly update the HTML DOM to say "Fetching..." before the API returns
                 const routeDiv = document.getElementById(`route-${plane.hex}`);
                 if (routeDiv) routeDiv.innerHTML = `<span class="stat-label">Route</span><span class="stat-value" style="color:#94a3b8">Fetching...</span>`;
@@ -143,7 +143,7 @@ map.on('zoomend', () => setTimeout(() => document.body.classList.remove('is-zoom
 
 // Major local airports for landing predictions
 const LOCAL_AIRPORTS = [
-    { id: 'BOS', name: 'Boston Logan', lat: 42.3656, lon: -71.0096, maxAlt: 18000, radius: 50 },
+    { id: 'BOS', name: 'Boston Logan', lat: 42.3656, lon: -71.0096, maxAlt: 18000, radius: 75 },
     { id: 'BED', name: 'Hanscom Field', lat: 42.4700, lon: -71.2895, maxAlt: 8000, radius: 20 },
     { id: 'MHT', name: 'Manchester-Boston', lat: 42.9326, lon: -71.4356, maxAlt: 12000, radius: 35 },
     { id: 'ORH', name: 'Worcester Regional', lat: 42.2673, lon: -71.8757, maxAlt: 10000, radius: 30 },
@@ -547,10 +547,10 @@ if (historySubmitBtn && historyLiveBtn && historyTimeInput) {
             alert('Please select a valid date and time.');
             return;
         }
-        
+
         isLiveMode = false;
         historyTime = timeVal;
-        
+
         // Show status dot and text for historical mode (replacing 'T' with space)
         const statusIndicator = document.getElementById('status-indicator');
         if (statusIndicator) {
@@ -559,7 +559,7 @@ if (historySubmitBtn && historyLiveBtn && historyTimeInput) {
                 <span class="dot historical"></span> Historical Mode (${timeVal.replace('T', ' ')})
             `;
         }
-        
+
         if (historyPlayBtn) historyPlayBtn.style.display = 'inline-block';
         historyLiveBtn.style.display = 'inline-block';
         historySubmitBtn.textContent = 'Querying...';
@@ -584,28 +584,28 @@ if (historySubmitBtn && historyLiveBtn && historyTimeInput) {
                 // Start playback
                 historyPlayBtn.textContent = 'Pause';
                 historyPlayBtn.classList.add('playing');
-                
+
                 playbackInterval = setInterval(async () => {
                     const timeVal = historyTimeInput.value;
                     if (!timeVal) {
                         stopPlayback();
                         return;
                     }
-                    
+
                     // Parse current time and increment by 1 minute (60,000 ms)
                     const currentDate = new Date(timeVal);
                     if (isNaN(currentDate.getTime())) {
                         stopPlayback();
                         return;
                     }
-                    
+
                     const newDate = new Date(currentDate.getTime() + 60000);
                     // Convert back to local timezone offset-adjusted ISO string (YYYY-MM-DDTHH:MM)
                     const localISOString = new Date(newDate.getTime() - newDate.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-                    
+
                     historyTimeInput.value = localISOString;
                     historyTime = localISOString;
-                    
+
                     // Update header status text to show current playback time
                     const statusIndicator = document.getElementById('status-indicator');
                     if (statusIndicator) {
@@ -614,7 +614,7 @@ if (historySubmitBtn && historyLiveBtn && historyTimeInput) {
                             <span class="dot historical"></span> Historical Mode (${localISOString.replace('T', ' ')})
                         `;
                     }
-                    
+
                     try {
                         await fetchAndRender(`/api/historical-data?timestamp=${encodeURIComponent(localISOString)}`);
                     } catch (err) {
@@ -628,9 +628,9 @@ if (historySubmitBtn && historyLiveBtn && historyTimeInput) {
     historyLiveBtn.addEventListener('click', async () => {
         isLiveMode = true;
         historyTime = null;
-        
+
         stopPlayback();
-        
+
         // Restore status indicator to live state
         const statusIndicator = document.getElementById('status-indicator');
         if (statusIndicator) {
@@ -639,10 +639,10 @@ if (historySubmitBtn && historyLiveBtn && historyTimeInput) {
                 <span class="dot live"></span> Live Data
             `;
         }
-        
+
         if (historyPlayBtn) historyPlayBtn.style.display = 'none';
         historyLiveBtn.style.display = 'none';
-        
+
         // Instantly poll live data
         await updateAircraft();
     });
@@ -659,23 +659,23 @@ if (searchBar && searchResults) {
     searchBar.addEventListener('input', (e) => {
         clearTimeout(searchTimeout);
         const query = e.target.value.trim();
-        
+
         if (query.length < 2) {
             searchResults.style.display = 'none';
             return;
         }
-        
+
         searchTimeout = setTimeout(async () => {
             try {
                 const res = await fetch(`/api/search?query=${query}`);
                 const data = await res.json();
-                
+
                 if (data.length === 0) {
                     searchResults.innerHTML = '<div class="search-result-item"><div class="search-result-details">No aircraft found</div></div>';
                     searchResults.style.display = 'block';
                     return;
                 }
-                
+
                 searchResults.innerHTML = data.map(plane => `
                     <div class="search-result-item" data-hex="${plane.hex}">
                         <div class="search-result-callsign">${plane.callsign || 'Unknown'} <span style="font-size: 0.7em; color: #94a3b8;">(${plane.hex})</span></div>
@@ -683,9 +683,9 @@ if (searchBar && searchResults) {
                         <div class="search-result-details">Alt: ${Math.round(plane.altitude || 0)} ft</div>
                     </div>
                 `).join('');
-                
+
                 searchResults.style.display = 'block';
-                
+
                 // Add click listeners to items
                 document.querySelectorAll('.search-result-item[data-hex]').forEach(item => {
                     item.addEventListener('click', () => {
@@ -695,7 +695,7 @@ if (searchBar && searchResults) {
                         searchBar.value = '';
                     });
                 });
-                
+
             } catch (error) {
                 console.error('Search failed:', error);
             }
@@ -714,9 +714,9 @@ async function loadAircraftHistory(hex) {
     try {
         const res = await fetch(`/api/history?hex=${hex}`);
         const data = await res.json();
-        
+
         if (data.length === 0) return;
-        
+
         if (historicalPathLayer) {
             map.removeLayer(historicalPathLayer);
             historicalPathLayer = null;
@@ -725,10 +725,10 @@ async function loadAircraftHistory(hex) {
             map.removeLayer(historicalMarker);
             historicalMarker = null;
         }
-        
+
         // Extract latlngs (ensure lat/lon are not null)
         const latlngs = data.filter(pt => pt.lat !== null && pt.lon !== null).map(pt => [pt.lat, pt.lon]);
-        
+
         if (latlngs.length > 0) {
             historicalPathLayer = L.polyline(latlngs, {
                 color: '#eab308', // Yellow
@@ -736,11 +736,11 @@ async function loadAircraftHistory(hex) {
                 opacity: 0.9,
                 dashArray: null // Solid line for history
             }).addTo(map);
-            
+
             // Pan to the most recent position
             const latestPos = latlngs[latlngs.length - 1];
             map.flyTo(latestPos, 11, { duration: 1.5 });
-            
+
             // If we have the live marker, open its popup
             if (aircraftMarkers[hex]) {
                 aircraftMarkers[hex].openPopup();
@@ -763,7 +763,7 @@ async function loadAircraftHistory(hex) {
                                 break;
                             }
                         }
-                        
+
                         if (p1) {
                             const dLon = (p2.lon - p1.lon) * Math.cos(p1.lat * Math.PI / 180);
                             const dLat = p2.lat - p1.lat;
@@ -774,10 +774,10 @@ async function loadAircraftHistory(hex) {
                 }
 
                 // Add a temporary gray marker for the last known position
-                const svgPath = PLANE_PATHS['narrow']; 
+                const svgPath = PLANE_PATHS['narrow'];
                 const svgDataUriRaw = `data:image/svg+xml;utf8,%3Csvg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" fill="%2364748b" stroke="%23334155" stroke-linejoin="round"%3E%3Cpath d="${svgPath}" stroke-width="16" /%3E%3C/svg%3E`;
                 const svgDataUri = svgDataUriRaw.replace(/"/g, '%22');
-                
+
                 const offlineIcon = L.divIcon({
                     className: 'custom-plane-icon',
                     html: `<div class="plane-icon" style="transform: rotate(${heading}deg); background-image: url('${svgDataUri}'); opacity: 0.8;"></div>`,
@@ -787,7 +787,7 @@ async function loadAircraftHistory(hex) {
                 });
 
                 historicalMarker = L.marker(latestPos, { icon: offlineIcon, zIndexOffset: 1000 }).addTo(map);
-                
+
                 historicalMarker.bindPopup(`<div style="color: #94a3b8; font-family: 'Inter', sans-serif; padding: 5px; text-align: center;"><b>${hex}</b><br><span style="font-size: 0.85em;">Offline. Last known location.</span></div>`).openPopup();
             }
         }
@@ -816,11 +816,11 @@ document.getElementById('heatmap-toggle').addEventListener('change', async (e) =
         try {
             const res = await fetch('/api/analytics/heatmap');
             const data = await res.json();
-            
+
             // Format for Leaflet.heat: [lat, lon, intensity]
             // Multiplier reduced to make it less sensitive
             const heatData = data.map(pt => [pt[0], pt[1], pt[2] * 0.2]);
-            
+
             heatmapLayer = L.heatLayer(heatData, {
                 radius: 20,
                 blur: 30,
@@ -847,10 +847,10 @@ document.getElementById('deviations-toggle').addEventListener('change', async (e
         try {
             const res = await fetch('/api/analytics/weather-deviations');
             const data = await res.json();
-            
+
             data.forEach(dev => {
                 let reason = dev.hc > 15 ? `Heading change of ${Math.round(dev.hc)}&deg;` : `Altitude change of ${Math.round(dev.ac)} ft`;
-                
+
                 const marker = L.circleMarker([dev.lat, dev.lon], {
                     radius: 8,
                     fillColor: "#ef4444",
@@ -859,7 +859,7 @@ document.getElementById('deviations-toggle').addEventListener('change', async (e
                     opacity: 1,
                     fillOpacity: 0.8
                 });
-                
+
                 marker.bindPopup(`
                     <div style="font-family:'Inter',sans-serif;">
                         <strong style="color:#ef4444;">Deviation Detected</strong><br>
@@ -868,7 +868,7 @@ document.getElementById('deviations-toggle').addEventListener('change', async (e
                         <button onclick="loadAircraftHistory('${dev.hex}')" style="margin-top:5px; padding:3px 8px; background:#10b981; color:#fff; border:none; border-radius:4px; cursor:pointer;">View Path</button>
                     </div>
                 `);
-                
+
                 deviationsLayerGroup.addLayer(marker);
             });
         } catch (err) {
