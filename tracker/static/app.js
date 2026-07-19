@@ -811,6 +811,14 @@ map.on('click', () => {
 // --- Analytics: Heatmap ---
 let heatmapLayer = null;
 
+// Helper to calculate dynamic heatmap radius & blur based on zoom
+const getDynamicHeatmapOptions = (zoom) => {
+    return {
+        radius: Math.max(3, zoom - 1),
+        blur: Math.max(3, Math.round((zoom - 1) * 1.2))
+    };
+};
+
 document.getElementById('heatmap-toggle').addEventListener('change', async (e) => {
     if (e.target.checked) {
         try {
@@ -821,9 +829,12 @@ document.getElementById('heatmap-toggle').addEventListener('change', async (e) =
             // Multiplier reduced to make it less sensitive and more granular
             const heatData = data.map(pt => [pt[0], pt[1], pt[2] * 0.05]);
 
+            const currentZoom = map.getZoom();
+            const opts = getDynamicHeatmapOptions(currentZoom);
+
             heatmapLayer = L.heatLayer(heatData, {
-                radius: 12,
-                blur: 15,
+                radius: opts.radius,
+                blur: opts.blur,
                 max: 8, // Higher max means more overlapping planes required to turn red
                 maxZoom: 14,
                 gradient: { 0.4: 'blue', 0.6: 'cyan', 0.7: 'lime', 0.8: 'yellow', 1.0: 'red' }
@@ -836,6 +847,18 @@ document.getElementById('heatmap-toggle').addEventListener('change', async (e) =
             map.removeLayer(heatmapLayer);
             heatmapLayer = null;
         }
+    }
+});
+
+// Update heatmap options dynamically on zoom to preserve granularity
+map.on('zoomend', () => {
+    if (heatmapLayer) {
+        const currentZoom = map.getZoom();
+        const opts = getDynamicHeatmapOptions(currentZoom);
+        heatmapLayer.setOptions({
+            radius: opts.radius,
+            blur: opts.blur
+        });
     }
 });
 

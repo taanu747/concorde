@@ -338,10 +338,10 @@ def get_heatmap_data():
         with get_db_connection() as conn:
             cutoff = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time() - 7 * 86400))
             query_sql = '''
-                SELECT ROUND(CAST(lat AS NUMERIC), 3) as r_lat, ROUND(CAST(lon AS NUMERIC), 3) as r_lon, COUNT(*) as intensity 
+                SELECT ROUND(CAST(lat AS NUMERIC), 2) as r_lat, ROUND(CAST(lon AS NUMERIC), 2) as r_lon, COUNT(*) as intensity 
                 FROM aircraft_history 
                 WHERE timestamp >= ?
-                GROUP BY ROUND(CAST(lat AS NUMERIC), 3), ROUND(CAST(lon AS NUMERIC), 3)
+                GROUP BY ROUND(CAST(lat AS NUMERIC), 2), ROUND(CAST(lon AS NUMERIC), 2)
             '''
             raw_results = execute_query(conn, query_sql, (cutoff,))
             # Format as [lat, lon, intensity] array for leaflet.heat
