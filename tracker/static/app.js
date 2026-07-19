@@ -818,13 +818,13 @@ document.getElementById('heatmap-toggle').addEventListener('change', async (e) =
             const data = await res.json();
 
             // Format for Leaflet.heat: [lat, lon, intensity]
-            // Multiplier reduced to make it less sensitive
-            const heatData = data.map(pt => [pt[0], pt[1], pt[2] * 0.2]);
+            // Multiplier reduced to make it less sensitive and more granular
+            const heatData = data.map(pt => [pt[0], pt[1], pt[2] * 0.05]);
 
             heatmapLayer = L.heatLayer(heatData, {
-                radius: 20,
-                blur: 30,
-                max: 3, // Higher max means more overlapping planes required to turn red
+                radius: 12,
+                blur: 15,
+                max: 8, // Higher max means more overlapping planes required to turn red
                 maxZoom: 14,
                 gradient: { 0.4: 'blue', 0.6: 'cyan', 0.7: 'lime', 0.8: 'yellow', 1.0: 'red' }
             }).addTo(map);
