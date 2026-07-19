@@ -393,7 +393,13 @@ def get_historical_aircraft_data():
         except ValueError:
             dt = datetime.datetime.strptime(target_time_str, "%Y-%m-%d %H:%M")
             
-        start_dt = dt - datetime.timedelta(seconds=30)
+        # Configurable query window interval (seconds) via query param or env variable, fallback to 30s
+        try:
+            interval_secs = int(request.args.get('interval') or os.environ.get('HISTORICAL_INTERVAL_SECONDS', 30))
+        except ValueError:
+            interval_secs = 30
+            
+        start_dt = dt - datetime.timedelta(seconds=interval_secs)
         end_dt = dt
         
         start_str = start_dt.strftime("%Y-%m-%d %H:%M:%S")
