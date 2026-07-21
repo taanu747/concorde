@@ -17,17 +17,7 @@ const darkTiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x
 
 lightTiles.addTo(map);
 
-// Define OpenWeatherMap Weather Overlay Layer (passed via OPENWEATHER_API_KEY env var)
-const openWeatherApiKey = window.OPENWEATHER_API_KEY || '';
-
-const weatherRadar = L.tileLayer(`https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=${openWeatherApiKey}`, {
-    maxZoom: 18,
-    opacity: 0.55,
-    attribution: 'Weather &copy; <a href="https://openweathermap.org/" target="_blank">OpenWeatherMap</a>',
-    zIndex: 10
-});
-
-// Fallback high-resolution RainViewer radar layer (in case OpenWeatherMap key is still activating)
+// Define RainViewer Live Weather Radar Overlay
 let rainViewerLayer = null;
 
 async function loadRainViewerRadar() {
@@ -38,14 +28,14 @@ async function loadRainViewerRadar() {
             const latest = data.radar.past[data.radar.past.length - 1];
             const tileUrl = `${data.host}${latest.path}/256/{z}/{x}/{y}/2/1_1.png`;
             return L.tileLayer(tileUrl, {
-                opacity: 0.6,
+                opacity: 0.65,
                 maxZoom: 18,
-                attribution: 'Weather &copy; <a href="https://www.rainviewer.com/" target="_blank">RainViewer</a>',
+                attribution: 'Weather Radar &copy; <a href="https://www.rainviewer.com/" target="_blank">RainViewer</a>',
                 zIndex: 10
             });
         }
     } catch (err) {
-        console.error('Failed to load RainViewer fallback radar:', err);
+        console.error('Failed to load RainViewer radar:', err);
     }
     return null;
 }
@@ -53,20 +43,13 @@ async function loadRainViewerRadar() {
 // Hook up the custom Weather Mode toggle UI checkbox
 document.getElementById('weather-toggle').addEventListener('change', async (e) => {
     if (e.target.checked) {
-        weatherRadar.addTo(map);
-        
-        // Auto-fallback to live RainViewer radar if OpenWeatherMap key is activating (401 error)
-        weatherRadar.on('tileerror', async () => {
-            if (!rainViewerLayer) {
-                rainViewerLayer = await loadRainViewerRadar();
-                if (rainViewerLayer && e.target.checked) {
-                    map.removeLayer(weatherRadar);
-                    rainViewerLayer.addTo(map);
-                }
-            }
-        });
+        if (!rainViewerLayer) {
+            rainViewerLayer = await loadRainViewerRadar();
+        }
+        if (rainViewerLayer && e.target.checked) {
+            rainViewerLayer.addTo(map);
+        }
     } else {
-        map.removeLayer(weatherRadar);
         if (rainViewerLayer) {
             map.removeLayer(rainViewerLayer);
         }

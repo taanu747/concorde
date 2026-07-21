@@ -77,10 +77,6 @@
     <!-- Leaflet.heat plugin -->
     <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 
-    <!-- Global Config -->
-    <script>
-        window.OPENWEATHER_API_KEY = "{{ owm_key }}";
-    </script>
 
     <!-- Custom JS -->
     <script src="{{ url_for('static', filename='app.js') }}?v={{ ts }}"></script>

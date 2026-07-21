@@ -184,7 +184,7 @@ def get_flight_route(flight_iata):
 def index():
     """Serve the main map page."""
     # Pass a timestamp parameter to bust browser cache for static files
-    return render_template('index.html', ts=int(time.time()), owm_key=os.environ.get('OPENWEATHER_API_KEY', ''))
+    return render_template('index.html', ts=int(time.time()))
 
 @app.route('/api/update', methods=['POST'])
 def update_aircraft_data():
