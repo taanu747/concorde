@@ -74,8 +74,7 @@ html {
     accent-color: #10b981;
 }
 
-#heatmap-control, #deviations-control, #theme-control,
-#vfr-sectional-control, #vfr-terminal-control, #ifr-low-control, #ifr-high-control {
+#heatmap-control, #deviations-control, #theme-control {
     position: absolute;
     left: 60px;
     z-index: 1000;
@@ -100,20 +99,65 @@ html {
 #heatmap-control { top: 65px; }
 #deviations-control { top: 110px; }
 #theme-control { top: 155px; }
-#vfr-sectional-control { top: 200px; }
-#vfr-terminal-control { top: 245px; }
-#ifr-low-control { top: 290px; }
-#ifr-high-control { top: 335px; }
 
-#heatmap-control:hover, #deviations-control:hover, #theme-control:hover,
-#vfr-sectional-control:hover, #vfr-terminal-control:hover, #ifr-low-control:hover, #ifr-high-control:hover {
+#heatmap-control:hover, #deviations-control:hover, #theme-control:hover {
     background: rgba(30, 41, 59, 0.9);
 }
 
-#heatmap-control input, #deviations-control input, #theme-control input,
-#vfr-sectional-control input, #vfr-terminal-control input, #ifr-low-control input, #ifr-high-control input {
+#heatmap-control input, #deviations-control input, #theme-control input {
     cursor: pointer;
     accent-color: #10b981;
+}
+
+/* VFR & IFR Sectional Glassmorphic Panel */
+#aero-section-container {
+    position: absolute;
+    left: 60px;
+    top: 200px;
+    z-index: 1000;
+    background: rgba(15, 23, 42, 0.85);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #f8fafc;
+    padding: 10px 14px;
+    border-radius: 10px;
+    box-shadow: 0 4px 10px -1px rgba(0, 0, 0, 0.4);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 170px;
+}
+
+#aero-section-container h3 {
+    margin: 0 0 2px 0;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #38bdf8; /* sky blue highlight */
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 4px;
+}
+
+#aero-section-container label {
+    font-size: 12px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.15s;
+}
+
+#aero-section-container label:hover {
+    color: #38bdf8;
+}
+
+#aero-section-container input[type="checkbox"] {
+    cursor: pointer;
+    accent-color: #38bdf8;
 }
 
 /* Retro Theme popup styles (darker, matrix-y) */

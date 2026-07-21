@@ -903,33 +903,42 @@ document.getElementById('deviations-toggle').addEventListener('change', async (e
 });
 
 // --- Aeronautical Chart Overlays (FAA Official ArcGIS Services) ---
+// Using minNativeZoom and maxNativeZoom ensures tiles scale smoothly across ALL zoom levels without disappearing
 const faaVfrSectional = L.tileLayer('https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/VFR_Sectional/MapServer/tile/{z}/{y}/{x}', {
-    minZoom: 8,
-    maxZoom: 12,
+    minNativeZoom: 8,
+    maxNativeZoom: 12,
+    minZoom: 1,
+    maxZoom: 20,
     opacity: 0.85,
     attribution: 'FAA AIS &copy; VFR Sectional',
     zIndex: 5
 });
 
 const faaVfrTerminal = L.tileLayer('https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/VFR_Terminal/MapServer/tile/{z}/{y}/{x}', {
-    minZoom: 8,
-    maxZoom: 12,
+    minNativeZoom: 8,
+    maxNativeZoom: 12,
+    minZoom: 1,
+    maxZoom: 20,
     opacity: 0.85,
     attribution: 'FAA AIS &copy; VFR Terminal',
     zIndex: 6
 });
 
 const faaIfrLow = L.tileLayer('https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/IFR_AreaLow/MapServer/tile/{z}/{y}/{x}', {
-    minZoom: 8,
-    maxZoom: 12,
+    minNativeZoom: 8,
+    maxNativeZoom: 12,
+    minZoom: 1,
+    maxZoom: 20,
     opacity: 0.85,
     attribution: 'FAA AIS &copy; IFR Low Enroute',
     zIndex: 5
 });
 
 const faaIfrHigh = L.tileLayer('https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/IFR_High/MapServer/tile/{z}/{y}/{x}', {
-    minZoom: 8,
-    maxZoom: 12,
+    minNativeZoom: 8,
+    maxNativeZoom: 12,
+    minZoom: 1,
+    maxZoom: 20,
     opacity: 0.85,
     attribution: 'FAA AIS &copy; IFR High Enroute',
     zIndex: 5
