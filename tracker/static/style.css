@@ -74,7 +74,8 @@ html {
     accent-color: #10b981;
 }
 
-#heatmap-control, #deviations-control, #theme-control {
+#heatmap-control, #deviations-control, #theme-control,
+#vfr-sectional-control, #vfr-terminal-control, #ifr-low-control, #ifr-high-control {
     position: absolute;
     left: 60px;
     z-index: 1000;
@@ -99,9 +100,21 @@ html {
 #heatmap-control { top: 65px; }
 #deviations-control { top: 110px; }
 #theme-control { top: 155px; }
+#vfr-sectional-control { top: 200px; }
+#vfr-terminal-control { top: 245px; }
+#ifr-low-control { top: 290px; }
+#ifr-high-control { top: 335px; }
 
-#heatmap-control:hover, #deviations-control:hover, #theme-control:hover { background: rgba(30, 41, 59, 0.9); }
-#heatmap-control input, #deviations-control input, #theme-control input { cursor: pointer; accent-color: #10b981; }
+#heatmap-control:hover, #deviations-control:hover, #theme-control:hover,
+#vfr-sectional-control:hover, #vfr-terminal-control:hover, #ifr-low-control:hover, #ifr-high-control:hover {
+    background: rgba(30, 41, 59, 0.9);
+}
+
+#heatmap-control input, #deviations-control input, #theme-control input,
+#vfr-sectional-control input, #vfr-terminal-control input, #ifr-low-control input, #ifr-high-control input {
+    cursor: pointer;
+    accent-color: #10b981;
+}
 
 /* Retro Theme popup styles (darker, matrix-y) */
 body.retro-theme .leaflet-popup-content-wrapper {
