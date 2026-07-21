@@ -17,42 +17,21 @@ const darkTiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x
 
 lightTiles.addTo(map);
 
-// Define RainViewer Live Weather Radar Overlay
-let rainViewerLayer = null;
-
-async function loadRainViewerRadar() {
-    try {
-        const res = await fetch('https://api.rainviewer.com/public/weather-maps.json');
-        const data = await res.json();
-        if (data && data.radar && data.radar.past && data.radar.past.length > 0) {
-            const latest = data.radar.past[data.radar.past.length - 1];
-            const tileUrl = `${data.host}${latest.path}/256/{z}/{x}/{y}/2/1_1.png`;
-            return L.tileLayer(tileUrl, {
-                opacity: 0.65,
-                maxZoom: 18,
-                attribution: 'Weather Radar &copy; <a href="https://www.rainviewer.com/" target="_blank">RainViewer</a>',
-                zIndex: 10
-            });
-        }
-    } catch (err) {
-        console.error('Failed to load RainViewer radar:', err);
-    }
-    return null;
-}
+// Define Live Weather Radar Layer (IEM NEXRAD Precipitation)
+const nexrad = L.tileLayer('https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png', {
+    format: 'image/png',
+    transparent: true,
+    opacity: 0.35,
+    attribution: "Weather data &copy; IEM Nexrad",
+    zIndex: 10 // Force weather to always render on top of map tiles
+});
 
 // Hook up the custom Weather Mode toggle UI checkbox
-document.getElementById('weather-toggle').addEventListener('change', async (e) => {
+document.getElementById('weather-toggle').addEventListener('change', (e) => {
     if (e.target.checked) {
-        if (!rainViewerLayer) {
-            rainViewerLayer = await loadRainViewerRadar();
-        }
-        if (rainViewerLayer && e.target.checked) {
-            rainViewerLayer.addTo(map);
-        }
+        nexrad.addTo(map);
     } else {
-        if (rainViewerLayer) {
-            map.removeLayer(rainViewerLayer);
-        }
+        map.removeLayer(nexrad);
     }
 });
 
