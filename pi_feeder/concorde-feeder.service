@@ -1,0 +1,14 @@
+[Unit]
+Description=Concorde Flight Tracker Pi Feeder
+After=network.target dump1090-fa.service
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/concorde/pi_feeder
+ExecStart=/home/pi/concorde/pi_feeder/venv/bin/python3 /home/pi/concorde/pi_feeder/feeder.py --target-url YOUR_VERCEL_URL --secret YOUR_FEEDER_SECRET
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
