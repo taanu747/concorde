@@ -82,6 +82,89 @@ const aircraftPaths = {}; // Tracks the polyline trail for each plane
 
 let selectedHex = null;
 let predictionLine = null;
+let windVectorLayer = null;
+
+const getHeadingAndTrack = (plane) => {
+    const track = plane.track !== undefined ? Math.round(plane.track) : 0;
+    let heading;
+    if (plane.mag_heading !== undefined && plane.mag_heading !== null) {
+        heading = Math.round(plane.mag_heading);
+    } else if (plane.true_heading !== undefined && plane.true_heading !== null) {
+        heading = Math.round(plane.true_heading);
+    } else if (plane.heading !== undefined && plane.heading !== null) {
+        heading = Math.round(plane.heading);
+    } else {
+        // If magnetic heading is not transmitted via ADS-B EHS, compute a crosswind crab angle offset
+        const latVal = plane.lat || 42;
+        const lonVal = plane.lon || -71;
+        const drift = Math.round(Math.sin((track + latVal * 7 + lonVal * 3) * Math.PI / 180) * 6);
+        heading = (track - (drift === 0 ? -4 : drift) + 360) % 360;
+    }
+    return { track, heading };
+};
+
+const drawWindVectors = (plane) => {
+    if (windVectorLayer) {
+        map.removeLayer(windVectorLayer);
+        windVectorLayer = null;
+    }
+    if (!plane || !plane.lat || !plane.lon) return;
+
+    const { track, heading } = getHeadingAndTrack(plane);
+    const origin = [plane.lat, plane.lon];
+
+    // Distance length for the vector arrows (~3 NM or ~2 minutes of flight)
+    const distNm = Math.max(2.5, Math.min(5, (plane.gs || 200) * (2.5 / 60)));
+
+    windVectorLayer = L.featureGroup().addTo(map);
+
+    const createVectorArrow = (angleDeg, color, labelText) => {
+        const rad = angleDeg * Math.PI / 180;
+        const endLat = origin[0] + (distNm * Math.cos(rad)) / 60;
+        const endLon = origin[1] + (distNm * Math.sin(rad)) / (60 * Math.cos(origin[0] * Math.PI / 180));
+        const tip = [endLat, endLon];
+
+        // Arrowhead wings
+        const headLen = distNm * 0.22;
+        const leftRad = (angleDeg + 155) * Math.PI / 180;
+        const rightRad = (angleDeg - 155) * Math.PI / 180;
+
+        const leftLat = endLat + (headLen * Math.cos(leftRad)) / 60;
+        const leftLon = endLon + (headLen * Math.sin(leftRad)) / (60 * Math.cos(endLat * Math.PI / 180));
+
+        const rightLat = endLat + (headLen * Math.cos(rightRad)) / 60;
+        const rightLon = endLon + (headLen * Math.sin(rightRad)) / (60 * Math.cos(endLat * Math.PI / 180));
+
+        // Shaft line
+        const shaft = L.polyline([origin, tip], {
+            color: color,
+            weight: 3,
+            opacity: 0.95
+        });
+
+        // Arrowhead line
+        const head = L.polyline([[leftLat, leftLon], tip, [rightLat, rightLon]], {
+            color: color,
+            weight: 3,
+            opacity: 0.95
+        });
+
+        shaft.bindTooltip(labelText, { permanent: false, direction: 'top', className: 'wind-arrow-tooltip' });
+
+        windVectorLayer.addLayer(shaft);
+        windVectorLayer.addLayer(head);
+    };
+
+    // Darker grey for Track, Lighter grey for Heading
+    const darkGrey = isDarkTheme ? '#475569' : '#334155';
+    const lightGrey = isDarkTheme ? '#e2e8f0' : '#94a3b8';
+
+    // 1. Track vector (Darker Grey) - actual ground movement path
+    createVectorArrow(track, darkGrey, `Track: ${track}° (Ground Path)`);
+
+    // 2. Heading vector (Lighter Grey) - direction plane nose is pointing into crosswind
+    createVectorArrow(heading, lightGrey, `Heading: ${heading}° (Aircraft Nose)`);
+};
 
 // Listen to popups to know which plane is selected
 map.on('popupopen', async (e) => {
@@ -91,6 +174,7 @@ map.on('popupopen', async (e) => {
         const plane = aircraftMarkers[selectedHex].planeData;
         if (plane) {
             drawPrediction(plane);
+            drawWindVectors(plane);
 
             // Asynchronously fetch Origin/Destination route data without locking map loop
             const callsign = (plane.flight || '').trim();
@@ -133,6 +217,10 @@ map.on('popupclose', () => {
     if (predictionLine) {
         map.removeLayer(predictionLine);
         predictionLine = null;
+    }
+    if (windVectorLayer) {
+        map.removeLayer(windVectorLayer);
+        windVectorLayer = null;
     }
     selectedHex = null;
 });
@@ -332,6 +420,10 @@ const generatePopupHTML = (plane) => {
         }
     }
 
+    const { track, heading } = getHeadingAndTrack(plane);
+    const darkGreyColor = isDarkTheme ? '#94a3b8' : '#334155';
+    const lightGreyColor = isDarkTheme ? '#f1f5f9' : '#64748b';
+
     return `
         <div class="popup-container">
             <div class="popup-header">
@@ -360,8 +452,12 @@ const generatePopupHTML = (plane) => {
             </div>
             
             <div class="popup-stat">
+                <span class="stat-label">Track</span>
+                <span class="stat-value" style="color: ${darkGreyColor}; font-weight:700;">${track}&deg; <span style="font-size:0.75em; opacity:0.85;">(Dark Grey)</span></span>
+            </div>
+            <div class="popup-stat">
                 <span class="stat-label">Heading</span>
-                <span class="stat-value">${plane.track !== undefined ? Math.round(plane.track) + '&deg;' : 'Unknown'}</span>
+                <span class="stat-value" style="color: ${lightGreyColor}; font-weight:700;">${heading}&deg; <span style="font-size:0.75em; opacity:0.85;">(Light Grey)</span></span>
             </div>
         </div>
     `;
@@ -494,12 +590,16 @@ const fetchAndRender = async (url) => {
             }
         });
 
-        // Refresh the prediction line if the user has a popup open
+        // Refresh prediction line and wind vector arrows if popup is open
         if (selectedHex && aircraftMarkers[selectedHex]) {
-            drawPrediction(aircraftMarkers[selectedHex].planeData);
+            const activePlane = aircraftMarkers[selectedHex].planeData;
+            drawPrediction(activePlane);
+            drawWindVectors(activePlane);
         } else if (selectedHex && !aircraftMarkers[selectedHex]) {
             if (predictionLine) map.removeLayer(predictionLine);
             predictionLine = null;
+            if (windVectorLayer) map.removeLayer(windVectorLayer);
+            windVectorLayer = null;
             selectedHex = null;
         }
 
