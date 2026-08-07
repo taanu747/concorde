@@ -74,7 +74,9 @@ html {
     accent-color: #10b981;
 }
 
-#heatmap-control, #deviations-control, #theme-control {
+#heatmap-control,
+#deviations-control,
+#theme-control {
     position: absolute;
     left: 60px;
     z-index: 1000;
@@ -96,15 +98,27 @@ html {
     transition: background 0.2s;
 }
 
-#heatmap-control { top: 65px; }
-#deviations-control { top: 110px; }
-#theme-control { top: 155px; }
+#heatmap-control {
+    top: 65px;
+}
 
-#heatmap-control:hover, #deviations-control:hover, #theme-control:hover {
+#deviations-control {
+    top: 110px;
+}
+
+#theme-control {
+    top: 155px;
+}
+
+#heatmap-control:hover,
+#deviations-control:hover,
+#theme-control:hover {
     background: rgba(30, 41, 59, 0.9);
 }
 
-#heatmap-control input, #deviations-control input, #theme-control input {
+#heatmap-control input,
+#deviations-control input,
+#theme-control input {
     cursor: pointer;
     accent-color: #10b981;
 }
@@ -135,7 +149,8 @@ html {
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: #38bdf8; /* sky blue highlight */
+    color: #38bdf8;
+    /* sky blue highlight */
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     padding-bottom: 4px;
 }
@@ -166,13 +181,24 @@ body.retro-theme .leaflet-popup-content-wrapper {
     border: 1px solid #10b981;
     color: #10b981;
 }
-body.retro-theme .leaflet-popup-tip { background: rgba(0, 20, 0, 0.95); }
+
+body.retro-theme .leaflet-popup-tip {
+    background: rgba(0, 20, 0, 0.95);
+}
+
 body.retro-theme .popup-header {
     border-bottom: 1px solid rgba(16, 185, 129, 0.5);
     color: #34d399;
 }
-body.retro-theme .stat-label { color: #059669; }
-body.retro-theme .stat-value { color: #6ee7b7; }
+
+body.retro-theme .stat-label {
+    color: #059669;
+}
+
+body.retro-theme .stat-value {
+    color: #6ee7b7;
+}
+
 body.retro-theme .popup-hex {
     background: rgba(16, 185, 129, 0.2);
     color: #34d399;
@@ -180,21 +206,29 @@ body.retro-theme .popup-hex {
 
 /* Special Plane Glow Auras */
 .custom-plane-icon.military-glow .plane-icon {
-    filter: drop-shadow(0px 0px 6px rgba(59, 130, 246, 0.8)) drop-shadow(0px 0px 14px rgba(59, 130, 246, 0.9)) !important; /* Blue glow */
+    filter: drop-shadow(0px 0px 6px rgba(59, 130, 246, 0.8)) drop-shadow(0px 0px 14px rgba(59, 130, 246, 0.9)) !important;
+    /* Blue glow */
 }
 
 .custom-plane-icon.high-alt-glow .plane-icon {
-    filter: drop-shadow(0px 0px 6px rgba(168, 85, 247, 0.8)) drop-shadow(0px 0px 14px rgba(168, 85, 247, 0.8)) !important; /* Purple glow */
+    filter: drop-shadow(0px 0px 6px rgba(168, 85, 247, 0.8)) drop-shadow(0px 0px 14px rgba(168, 85, 247, 0.8)) !important;
+    /* Purple glow */
 }
 
 .custom-plane-icon.emergency-glow .plane-icon {
-    filter: drop-shadow(0px 0px 6px rgba(239, 68, 68, 0.9)) drop-shadow(0px 0px 16px rgba(239, 68, 68, 1)) !important; /* Severe Red */
+    filter: drop-shadow(0px 0px 6px rgba(239, 68, 68, 0.9)) drop-shadow(0px 0px 16px rgba(239, 68, 68, 1)) !important;
+    /* Severe Red */
     animation: pulse-emergency 0.6s infinite alternate;
 }
 
 @keyframes pulse-emergency {
-    0% { filter: drop-shadow(0px 0px 6px rgba(239, 68, 68, 0.8)) drop-shadow(0px 0px 12px rgba(239, 68, 68, 0.8)); }
-    100% { filter: drop-shadow(0px 0px 12px rgba(239, 68, 68, 1)) drop-shadow(0px 0px 24px rgba(239, 68, 68, 1)) drop-shadow(0px 0px 32px rgba(239, 68, 68, 0.6)); }
+    0% {
+        filter: drop-shadow(0px 0px 6px rgba(239, 68, 68, 0.8)) drop-shadow(0px 0px 12px rgba(239, 68, 68, 0.8));
+    }
+
+    100% {
+        filter: drop-shadow(0px 0px 12px rgba(239, 68, 68, 1)) drop-shadow(0px 0px 24px rgba(239, 68, 68, 1)) drop-shadow(0px 0px 32px rgba(239, 68, 68, 0.6));
+    }
 }
 
 #header h1 {
@@ -260,7 +294,7 @@ body.retro-theme .popup-hex {
     background-position: center;
     transform-origin: center center;
     transition: transform 0.2s ease-in-out, left 0.5s linear, top 0.5s linear;
-    filter: drop-shadow(0px 2px 3px rgba(0,0,0,0.6));
+    filter: drop-shadow(0px 2px 3px rgba(0, 0, 0, 0.6));
 }
 
 /* Plane smooth gliding transition */
@@ -477,7 +511,8 @@ body:not(.is-zooming) .leaflet-marker-icon.custom-plane-icon {
     cursor: not-allowed;
 }
 
-#history-submit-btn:active, #history-live-btn:active {
+#history-submit-btn:active,
+#history-live-btn:active {
     transform: scale(0.98);
 }
 
@@ -521,9 +556,11 @@ body:not(.is-zooming) .leaflet-marker-icon.custom-plane-icon {
     0% {
         opacity: 1;
     }
+
     50% {
         opacity: 0.4;
     }
+
     100% {
         opacity: 1;
     }
@@ -543,7 +580,7 @@ body:not(.is-zooming) .leaflet-marker-icon.custom-plane-icon {
 
 /* Flip Popup Box Below Marker for Northbound Aircraft */
 .leaflet-popup.popup-below .leaflet-popup-content-wrapper {
-    transform: translateY(calc(100% + 75px)) !important;
+    transform: translateY(calc(100% + 50px)) !important;
 }
 
 .leaflet-popup.popup-below .leaflet-popup-tip-container {
