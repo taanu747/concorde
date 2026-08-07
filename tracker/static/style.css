@@ -542,11 +542,25 @@ body:not(.is-zooming) .leaflet-marker-icon.custom-plane-icon {
 }
 
 /* Flip Popup Box Below Marker for Northbound Aircraft */
+.leaflet-popup.popup-below {
+    margin-bottom: 0 !important;
+}
+
 .leaflet-popup.popup-below .leaflet-popup-content-wrapper {
-    transform: translateY(calc(100% + 35px)) !important;
+    margin-top: 25px !important;
+    transform: none !important;
 }
 
 .leaflet-popup.popup-below .leaflet-popup-tip-container {
-    top: 15px !important;
+    top: 5px !important;
     bottom: auto !important;
+}
+
+.leaflet-popup.popup-below .leaflet-popup-tip {
+    transform: rotate(180deg) !important;
+}
+
+.leaflet-popup.popup-below .leaflet-popup-close-button {
+    top: 33px !important;
+    right: 8px !important;
 }
