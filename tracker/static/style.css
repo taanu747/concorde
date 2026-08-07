@@ -41,39 +41,8 @@ html {
     /* Let clicks pass through to map if needed */
 }
 
-/* Floating custom Weather Mode Toggle next to Leaflet Zoom Controls */
-#weather-control {
-    position: absolute;
-    top: 20px;
-    left: 60px;
-    z-index: 1000;
-    background: rgba(15, 23, 42, 0.8);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: #f8fafc;
-    padding: 8px 12px;
-    border-radius: 8px;
-    font-size: 13px;
-    font-weight: 600;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
-    cursor: pointer;
-    user-select: none;
-    transition: background 0.2s;
-}
-
-#weather-control:hover {
-    background: rgba(30, 41, 59, 0.9);
-}
-
-#weather-control input {
-    cursor: pointer;
-    accent-color: #10b981;
-}
-
+/* Floating custom Control Panel Buttons next to Leaflet Zoom Controls */
+#weather-control,
 #wind-control,
 #heatmap-control,
 #deviations-control,
@@ -99,22 +68,13 @@ html {
     transition: background 0.2s;
 }
 
-#wind-control {
-    top: 65px;
-}
+#weather-control { top: 20px; }
+#wind-control { top: 65px; }
+#heatmap-control { top: 110px; }
+#deviations-control { top: 155px; }
+#theme-control { top: 200px; }
 
-#heatmap-control {
-    top: 110px;
-}
-
-#deviations-control {
-    top: 155px;
-}
-
-#theme-control {
-    top: 200px;
-}
-
+#weather-control:hover,
 #wind-control:hover,
 #heatmap-control:hover,
 #deviations-control:hover,
@@ -122,6 +82,7 @@ html {
     background: rgba(30, 41, 59, 0.9);
 }
 
+#weather-control input,
 #wind-control input,
 #heatmap-control input,
 #deviations-control input,
