@@ -1127,3 +1127,197 @@ document.getElementById('ifr-low-toggle')?.addEventListener('change', (e) => {
 document.getElementById('ifr-high-toggle')?.addEventListener('change', (e) => {
     if (e.target.checked) faaIfrHigh.addTo(map); else map.removeLayer(faaIfrHigh);
 });
+
+// --- Open-Meteo Animated Wind Particle Overlay ---
+let windCanvas = null;
+let windCanvasCtx = null;
+let windAnimId = null;
+let windGrid = [];
+let windParticles = [];
+let isWindActive = false;
+
+const fetchOpenMeteoWindGrid = async () => {
+    try {
+        const bounds = map.getBounds();
+        const minLat = bounds.getSouth();
+        const maxLat = bounds.getNorth();
+        const minLon = bounds.getWest();
+        const maxLon = bounds.getEast();
+
+        // Sample a 5x5 grid of coordinates across map bounds
+        const latSteps = 5;
+        const lonSteps = 5;
+        const lats = [];
+        const lons = [];
+
+        for (let i = 0; i <= latSteps; i++) {
+            lats.push((minLat + (maxLat - minLat) * (i / latSteps)).toFixed(3));
+        }
+        for (let j = 0; j <= lonSteps; j++) {
+            lons.push((minLon + (maxLon - minLon) * (j / lonSteps)).toFixed(3));
+        }
+
+        const latStr = lats.join(',');
+        const lonStr = lons.join(',');
+
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${latStr}&longitude=${lonStr}&current=wind_speed_10m,wind_direction_10m`;
+
+        const res = await fetch(url);
+        const data = await res.json();
+
+        windGrid = [];
+
+        if (Array.isArray(data)) {
+            data.forEach(item => {
+                const lat = item.latitude;
+                const lon = item.longitude;
+                const current = item.current || {};
+                const spd = current.wind_speed_10m || 10; // km/h
+                const dir = current.wind_direction_10m || 0; // degrees
+
+                // Convert meteorological wind direction (where wind blows FROM) to vector components
+                const rad = (dir + 180) * Math.PI / 180; // direction wind is blowing TO
+                const u = spd * Math.sin(rad) * 0.15; // horizontal vector
+                const v = -spd * Math.cos(rad) * 0.15; // vertical vector
+
+                const point = map.latLngToContainerPoint([lat, lon]);
+                windGrid.push({ x: point.x, y: point.y, u, v, spd });
+            });
+        }
+    } catch (err) {
+        console.error("Open-Meteo wind API error:", err);
+    }
+};
+
+const initWindCanvas = () => {
+    if (!windCanvas) {
+        windCanvas = document.createElement('canvas');
+        windCanvas.style.position = 'absolute';
+        windCanvas.style.top = '0';
+        windCanvas.style.left = '0';
+        windCanvas.style.pointerEvents = 'none';
+        windCanvas.style.zIndex = '350';
+        map.getPanes().overlayPane.appendChild(windCanvas);
+    }
+    const size = map.getSize();
+    windCanvas.width = size.x;
+    windCanvas.height = size.y;
+    windCanvasCtx = windCanvas.getContext('2d');
+
+    // Spawn 250 particles
+    windParticles = [];
+    for (let i = 0; i < 250; i++) {
+        windParticles.push({
+            x: Math.random() * size.x,
+            y: Math.random() * size.y,
+            age: Math.floor(Math.random() * 80),
+            maxAge: 60 + Math.floor(Math.random() * 60)
+        });
+    }
+};
+
+const getInterpolatedWind = (px, py) => {
+    if (windGrid.length === 0) return { u: 0.8, v: -0.5, spd: 12 };
+
+    let nearest = windGrid[0];
+    let minDist = Infinity;
+
+    for (let i = 0; i < windGrid.length; i++) {
+        const pt = windGrid[i];
+        const dx = pt.x - px;
+        const dy = pt.y - py;
+        const distSq = dx * dx + dy * dy;
+        if (distSq < minDist) {
+            minDist = distSq;
+            nearest = pt;
+        }
+    }
+    return nearest;
+};
+
+const renderWindParticlesFrame = () => {
+    if (!isWindActive || !windCanvasCtx) return;
+
+    const width = windCanvas.width;
+    const height = windCanvas.height;
+
+    // Smooth trail fading
+    windCanvasCtx.fillStyle = 'rgba(15, 23, 42, 0.18)';
+    windCanvasCtx.globalCompositeOperation = 'destination-out';
+    windCanvasCtx.fillRect(0, 0, width, height);
+    windCanvasCtx.globalCompositeOperation = 'source-over';
+
+    windParticles.forEach(p => {
+        const wind = getInterpolatedWind(p.x, p.y);
+        const oldX = p.x;
+        const oldY = p.y;
+
+        p.x += wind.u;
+        p.y += wind.v;
+        p.age++;
+
+        if (p.x < 0 || p.x > width || p.y < 0 || p.y > height || p.age >= p.maxAge) {
+            p.x = Math.random() * width;
+            p.y = Math.random() * height;
+            p.age = 0;
+        } else {
+            windCanvasCtx.beginPath();
+            windCanvasCtx.moveTo(oldX, oldY);
+            windCanvasCtx.lineTo(p.x, p.y);
+
+            // Speed color gradient
+            if (wind.spd > 35) {
+                windCanvasCtx.strokeStyle = 'rgba(232, 121, 249, 0.9)'; // Magenta for high speed
+            } else if (wind.spd > 20) {
+                windCanvasCtx.strokeStyle = 'rgba(52, 211, 153, 0.85)'; // Emerald
+            } else {
+                windCanvasCtx.strokeStyle = 'rgba(56, 189, 248, 0.8)'; // Cyan / Light blue
+            }
+
+            windCanvasCtx.lineWidth = 1.8;
+            windCanvasCtx.stroke();
+        }
+    });
+
+    windAnimId = requestAnimationFrame(renderWindParticlesFrame);
+};
+
+const startWindParticles = async () => {
+    isWindActive = true;
+    initWindCanvas();
+    await fetchOpenMeteoWindGrid();
+    if (windAnimId) cancelAnimationFrame(windAnimId);
+    renderWindParticlesFrame();
+};
+
+const stopWindParticles = () => {
+    isWindActive = false;
+    if (windAnimId) {
+        cancelAnimationFrame(windAnimId);
+        windAnimId = null;
+    }
+    if (windCanvas && windCanvasCtx) {
+        windCanvasCtx.clearRect(0, 0, windCanvas.width, windCanvas.height);
+        if (windCanvas.parentNode) {
+            windCanvas.parentNode.removeChild(windCanvas);
+        }
+        windCanvas = null;
+    }
+};
+
+// Event listener for wind toggle
+document.getElementById('wind-toggle')?.addEventListener('change', (e) => {
+    if (e.target.checked) {
+        startWindParticles();
+    } else {
+        stopWindParticles();
+    }
+});
+
+// Update wind vectors on map pan / zoom
+map.on('moveend zoomend', () => {
+    if (isWindActive) {
+        initWindCanvas();
+        fetchOpenMeteoWindGrid();
+    }
+});

@@ -74,6 +74,7 @@ html {
     accent-color: #10b981;
 }
 
+#wind-control,
 #heatmap-control,
 #deviations-control,
 #theme-control {
@@ -98,36 +99,42 @@ html {
     transition: background 0.2s;
 }
 
-#heatmap-control {
+#wind-control {
     top: 65px;
 }
 
-#deviations-control {
+#heatmap-control {
     top: 110px;
 }
 
-#theme-control {
+#deviations-control {
     top: 155px;
 }
 
+#theme-control {
+    top: 200px;
+}
+
+#wind-control:hover,
 #heatmap-control:hover,
 #deviations-control:hover,
 #theme-control:hover {
     background: rgba(30, 41, 59, 0.9);
 }
 
+#wind-control input,
 #heatmap-control input,
 #deviations-control input,
 #theme-control input {
     cursor: pointer;
-    accent-color: #10b981;
+    accent-color: #38bdf8;
 }
 
 /* VFR & IFR Sectional Glassmorphic Panel */
 #aero-section-container {
     position: absolute;
     left: 60px;
-    top: 200px;
+    top: 245px;
     z-index: 1000;
     background: rgba(15, 23, 42, 0.85);
     backdrop-filter: blur(8px);
