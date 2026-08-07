@@ -541,14 +541,17 @@ body:not(.is-zooming) .leaflet-marker-icon.custom-plane-icon {
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3) !important;
 }
 
-/* Flip Popup Box Below Marker for Northbound Aircraft */
+/* Flip Popup Box Below Marker for Northbound Aircraft (Preserving horizontal alignment) */
 .leaflet-popup.popup-below {
     margin-bottom: 0 !important;
-    transform: translateY(calc(100% + 35px)) !important;
+}
+
+.leaflet-popup.popup-below .leaflet-popup-content-wrapper {
+    margin-top: 35px !important;
 }
 
 .leaflet-popup.popup-below .leaflet-popup-tip-container {
-    top: -10px !important;
+    top: 15px !important;
     bottom: auto !important;
 }
 
