@@ -394,13 +394,19 @@ const createRotatedPlaneIcon = (plane, heading, planeType, alt) => {
         glowClass = ' high-alt-glow';
     }
 
+    // Position popup below the aircraft when heading North (between 270° and 90°)
+    // so the North-bound path and vector arrows remain completely visible!
+    const trackDeg = (plane.track !== undefined && plane.track !== null) ? plane.track : (heading || 0);
+    const isHeadingNorth = (trackDeg >= 270 || trackDeg <= 90);
+    const popupOffset = isHeadingNorth ? [0, 215] : [0, -16];
+
     return L.divIcon({
         className: 'custom-plane-icon' + glowClass,
         // We use our custom upright SVGs, so 0 degrees is True North. No need to subtract 45.
         html: `<div class="plane-icon" style="transform: rotate(${heading || 0}deg); background-image: url('${svgDataUri}');"></div>`,
         iconSize: [32, 32],
         iconAnchor: [16, 16],
-        popupAnchor: [0, -16]
+        popupAnchor: popupOffset
     });
 };
 
