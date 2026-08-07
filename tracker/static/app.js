@@ -421,8 +421,8 @@ const generatePopupHTML = (plane) => {
     }
 
     const { track, heading } = getHeadingAndTrack(plane);
-    const darkGreyColor = isDarkTheme ? '#94a3b8' : '#334155';
-    const lightGreyColor = isDarkTheme ? '#f1f5f9' : '#64748b';
+    const trackTextColor = '#38bdf8'; // Bright sky blue (high contrast on dark popups)
+    const headingTextColor = '#f8fafc'; // Pure bright white (high contrast on dark popups)
 
     return `
         <div class="popup-container">
@@ -453,11 +453,11 @@ const generatePopupHTML = (plane) => {
             
             <div class="popup-stat">
                 <span class="stat-label">Track</span>
-                <span class="stat-value" style="color: ${darkGreyColor}; font-weight:700;">${track}&deg; <span style="font-size:0.75em; opacity:0.85;">(Dark Grey)</span></span>
+                <span class="stat-value" style="color: ${trackTextColor}; font-weight:700;">${track}&deg; <span style="font-size:0.75em; color: #94a3b8;">(Dark Arrow)</span></span>
             </div>
             <div class="popup-stat">
                 <span class="stat-label">Heading</span>
-                <span class="stat-value" style="color: ${lightGreyColor}; font-weight:700;">${heading}&deg; <span style="font-size:0.75em; opacity:0.85;">(Light Grey)</span></span>
+                <span class="stat-value" style="color: ${headingTextColor}; font-weight:700;">${heading}&deg; <span style="font-size:0.75em; color: #cbd5e1;">(Light Arrow)</span></span>
             </div>
         </div>
     `;
