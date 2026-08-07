@@ -540,3 +540,18 @@ body:not(.is-zooming) .leaflet-marker-icon.custom-plane-icon {
     padding: 3px 6px !important;
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3) !important;
 }
+
+/* Flip Popup Box Below Marker for Northbound Aircraft */
+.leaflet-popup.popup-below {
+    margin-bottom: 0 !important;
+    transform: translateY(calc(100% + 35px)) !important;
+}
+
+.leaflet-popup.popup-below .leaflet-popup-tip-container {
+    top: -10px !important;
+    bottom: auto !important;
+}
+
+.leaflet-popup.popup-below .leaflet-popup-tip {
+    transform: rotate(180deg) !important;
+}

@@ -168,11 +168,24 @@ const drawWindVectors = (plane) => {
 
 // Listen to popups to know which plane is selected
 map.on('popupopen', async (e) => {
-    const marker = e.popup._source;
+    const popup = e.popup;
+    const marker = popup._source;
     if (marker && marker.planeHex) {
         selectedHex = marker.planeHex;
         const plane = aircraftMarkers[selectedHex].planeData;
         if (plane) {
+            const track = (plane.track !== undefined && plane.track !== null) ? plane.track : (plane.heading || 0);
+            const isHeadingNorth = (track >= 270 || track <= 90);
+
+            const popupNode = popup.getElement();
+            if (popupNode) {
+                if (isHeadingNorth) {
+                    popupNode.classList.add('popup-below');
+                } else {
+                    popupNode.classList.remove('popup-below');
+                }
+            }
+
             drawPrediction(plane);
             drawWindVectors(plane);
 
