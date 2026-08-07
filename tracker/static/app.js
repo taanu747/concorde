@@ -370,6 +370,17 @@ const generatePopupHTML = (plane) => {
 let isLiveMode = true;
 let historyTime = null;
 
+const parseTimestamp = (ts) => {
+    if (!ts) return 0;
+    if (typeof ts === 'number') return ts;
+    let iso = String(ts).trim().replace(' ', 'T');
+    if (!iso.endsWith('Z') && !iso.includes('+') && !iso.includes('-')) {
+        iso += 'Z';
+    }
+    const t = Date.parse(iso);
+    return isNaN(t) ? 0 : t;
+};
+
 // Helper to fetch data from a given URL and update the map
 const fetchAndRender = async (url) => {
     try {
@@ -400,6 +411,8 @@ const fetchAndRender = async (url) => {
                             plane.routeStr = marker.planeData.routeStr;
                         }
 
+                        const lastPointTime = marker.planeData ? marker.planeData._lastPointTimestamp : null;
+                        plane._lastPointTimestamp = Date.now();
                         marker.planeData = plane; // Refresh the data payload for predictions
                         marker.setLatLng(latLng);
                         marker.setIcon(createRotatedPlaneIcon(plane, heading, planeType, alt));
@@ -412,15 +425,20 @@ const fetchAndRender = async (url) => {
                             const latlngs = currentPath.getLatLngs();
                             const trueAltColor = getAltitudeColor(alt).hex;
 
+                            const nowTime = Date.now();
+                            const ONE_HOUR_MS = 3600 * 1000;
+                            const hasOneHourGap = lastPointTime && (nowTime - lastPointTime > ONE_HOUR_MS);
+
                             // Only add if the coordinate actually changed
                             if (latlngs.length === 0 ||
                                 latlngs[latlngs.length - 1].lat !== latLng[0] ||
                                 latlngs[latlngs.length - 1].lng !== latLng[1]) {
 
-                                if (currentPath.trueAltColor !== trueAltColor) {
-                                    // Altitude bracket crossed! Spawn a brand new line segment chunk.
-                                    const lastPoint = latlngs[latlngs.length - 1];
-                                    const newPath = L.polyline([lastPoint, latLng], {
+                                if (hasOneHourGap || currentPath.trueAltColor !== trueAltColor) {
+                                    // Altitude bracket crossed or 1h gap! Spawn a brand new line segment chunk.
+                                    const lastPoint = hasOneHourGap ? null : latlngs[latlngs.length - 1];
+                                    const initialPoints = lastPoint ? [lastPoint, latLng] : [latLng];
+                                    const newPath = L.polyline(initialPoints, {
                                         color: isDarkTheme ? '#10b981' : trueAltColor,
                                         weight: 2,
                                         opacity: 0.8,
@@ -436,6 +454,7 @@ const fetchAndRender = async (url) => {
                         }
                     } else {
                         // Create new marker
+                        plane._lastPointTimestamp = Date.now();
                         const marker = L.marker(latLng, {
                             icon: createRotatedPlaneIcon(plane, heading, planeType, alt),
                             zIndexOffset: plane.alt_baro || plane.alt || plane.altitude || 0 // Higher planes appear on top
@@ -677,7 +696,7 @@ if (searchBar && searchResults) {
                 }
 
                 searchResults.innerHTML = data.map(plane => `
-                    <div class="search-result-item" data-hex="${plane.hex}">
+                    <div class="search-result-item" data-hex="${plane.hex}" data-callsign="${plane.callsign || ''}">
                         <div class="search-result-callsign">${plane.callsign || 'Unknown'} <span style="font-size: 0.7em; color: #94a3b8;">(${plane.hex})</span></div>
                         <div class="search-result-details">Last seen: ${plane.last_seen} UTC</div>
                         <div class="search-result-details">Alt: ${Math.round(plane.altitude || 0)} ft</div>
@@ -690,7 +709,8 @@ if (searchBar && searchResults) {
                 document.querySelectorAll('.search-result-item[data-hex]').forEach(item => {
                     item.addEventListener('click', () => {
                         const hex = item.getAttribute('data-hex');
-                        loadAircraftHistory(hex);
+                        const callsign = item.getAttribute('data-callsign');
+                        loadAircraftHistory(hex, callsign);
                         searchResults.style.display = 'none';
                         searchBar.value = '';
                     });
@@ -710,9 +730,13 @@ if (searchBar && searchResults) {
     });
 }
 
-async function loadAircraftHistory(hex) {
+async function loadAircraftHistory(hex, callsign) {
     try {
-        const res = await fetch(`/api/history?hex=${hex}`);
+        let url = `/api/history?hex=${encodeURIComponent(hex)}`;
+        if (callsign) {
+            url += `&callsign=${encodeURIComponent(callsign)}`;
+        }
+        const res = await fetch(url);
         const data = await res.json();
 
         if (data.length === 0) return;
@@ -726,70 +750,100 @@ async function loadAircraftHistory(hex) {
             historicalMarker = null;
         }
 
-        // Extract latlngs (ensure lat/lon are not null)
-        const latlngs = data.filter(pt => pt.lat !== null && pt.lon !== null).map(pt => [pt.lat, pt.lon]);
+        const validPoints = data.filter(pt => pt.lat !== null && pt.lon !== null);
+        if (validPoints.length === 0) return;
 
-        if (latlngs.length > 0) {
-            historicalPathLayer = L.polyline(latlngs, {
-                color: '#eab308', // Yellow
-                weight: 3,
-                opacity: 0.9,
-                dashArray: null // Solid line for history
-            }).addTo(map);
+        // Group history points into separate flight segments based on 1-hour (3600s) gaps
+        const ONE_HOUR_MS = 3600 * 1000;
+        const flightSegments = [];
+        let currentSegment = [];
 
-            // Pan to the most recent position
-            const latestPos = latlngs[latlngs.length - 1];
-            map.flyTo(latestPos, 11, { duration: 1.5 });
+        for (let i = 0; i < validPoints.length; i++) {
+            const pt = validPoints[i];
+            const ptTime = parseTimestamp(pt.timestamp);
 
-            // If we have the live marker, open its popup
-            if (aircraftMarkers[hex]) {
-                aircraftMarkers[hex].openPopup();
-            } else {
-                // Extract exact heading from the last known data point, or fallback to calculating it
-                let heading = 0;
-                const validPoints = data.filter(pt => pt.lat !== null && pt.lon !== null);
-                if (validPoints.length > 0) {
-                    const lastPt = validPoints[validPoints.length - 1];
-                    if (lastPt.heading !== null && lastPt.heading !== undefined) {
-                        heading = lastPt.heading;
-                    } else if (validPoints.length >= 2) {
-                        // Fallback to GPS coordinate math for older database entries
-                        let p1 = null;
-                        const p2 = lastPt;
-                        // Iterate backwards to find a distinct point
-                        for (let i = validPoints.length - 2; i >= 0; i--) {
-                            if (validPoints[i].lat !== p2.lat || validPoints[i].lon !== p2.lon) {
-                                p1 = validPoints[i];
-                                break;
-                            }
-                        }
+            if (currentSegment.length > 0) {
+                const prevPt = currentSegment[currentSegment.length - 1];
+                const prevTime = parseTimestamp(prevPt.timestamp);
 
-                        if (p1) {
-                            const dLon = (p2.lon - p1.lon) * Math.cos(p1.lat * Math.PI / 180);
-                            const dLat = p2.lat - p1.lat;
-                            heading = Math.atan2(dLon, dLat) * 180 / Math.PI;
-                            heading = (heading + 360) % 360;
-                        }
+                if (ptTime && prevTime && (ptTime - prevTime) > ONE_HOUR_MS) {
+                    flightSegments.push(currentSegment);
+                    currentSegment = [];
+                }
+            }
+            currentSegment.push(pt);
+        }
+        if (currentSegment.length > 0) {
+            flightSegments.push(currentSegment);
+        }
+
+        historicalPathLayer = L.featureGroup().addTo(map);
+
+        flightSegments.forEach((segment, idx) => {
+            const latlngs = segment.map(pt => [pt.lat, pt.lon]);
+            if (latlngs.length > 0) {
+                const isLatestSegment = (idx === flightSegments.length - 1);
+                const polyline = L.polyline(latlngs, {
+                    color: '#eab308', // Yellow
+                    weight: 3,
+                    opacity: isLatestSegment ? 0.9 : 0.5,
+                    dashArray: isLatestSegment ? null : '6, 6'
+                });
+                historicalPathLayer.addLayer(polyline);
+            }
+        });
+
+        // Pan to the most recent position
+        const latestPoint = validPoints[validPoints.length - 1];
+        const latestPos = [latestPoint.lat, latestPoint.lon];
+        map.flyTo(latestPos, 11, { duration: 1.5 });
+
+        // If we have the live marker, open its popup
+        if (aircraftMarkers[hex]) {
+            aircraftMarkers[hex].openPopup();
+        } else {
+            // Extract exact heading from the last known data point, or fallback to calculating it
+            let heading = 0;
+            const lastPt = validPoints[validPoints.length - 1];
+            if (lastPt.heading !== null && lastPt.heading !== undefined) {
+                heading = lastPt.heading;
+            } else if (validPoints.length >= 2) {
+                // Fallback to GPS coordinate math for older database entries
+                let p1 = null;
+                const p2 = lastPt;
+                // Iterate backwards to find a distinct point
+                for (let i = validPoints.length - 2; i >= 0; i--) {
+                    if (validPoints[i].lat !== p2.lat || validPoints[i].lon !== p2.lon) {
+                        p1 = validPoints[i];
+                        break;
                     }
                 }
 
-                // Add a temporary gray marker for the last known position
-                const svgPath = PLANE_PATHS['narrow'];
-                const svgDataUriRaw = `data:image/svg+xml;utf8,%3Csvg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" fill="%2364748b" stroke="%23334155" stroke-linejoin="round"%3E%3Cpath d="${svgPath}" stroke-width="16" /%3E%3C/svg%3E`;
-                const svgDataUri = svgDataUriRaw.replace(/"/g, '%22');
-
-                const offlineIcon = L.divIcon({
-                    className: 'custom-plane-icon',
-                    html: `<div class="plane-icon" style="transform: rotate(${heading}deg); background-image: url('${svgDataUri}'); opacity: 0.8;"></div>`,
-                    iconSize: [32, 32],
-                    iconAnchor: [16, 16],
-                    popupAnchor: [0, -16]
-                });
-
-                historicalMarker = L.marker(latestPos, { icon: offlineIcon, zIndexOffset: 1000 }).addTo(map);
-
-                historicalMarker.bindPopup(`<div style="color: #94a3b8; font-family: 'Inter', sans-serif; padding: 5px; text-align: center;"><b>${hex}</b><br><span style="font-size: 0.85em;">Offline. Last known location.</span></div>`).openPopup();
+                if (p1) {
+                    const dLon = (p2.lon - p1.lon) * Math.cos(p1.lat * Math.PI / 180);
+                    const dLat = p2.lat - p1.lat;
+                    heading = Math.atan2(dLon, dLat) * 180 / Math.PI;
+                    heading = (heading + 360) % 360;
+                }
             }
+
+            // Add a temporary gray marker for the last known position
+            const svgPath = PLANE_PATHS['narrow'];
+            const svgDataUriRaw = `data:image/svg+xml;utf8,%3Csvg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" fill="%2364748b" stroke="%23334155" stroke-linejoin="round"%3E%3Cpath d="${svgPath}" stroke-width="16" /%3E%3C/svg%3E`;
+            const svgDataUri = svgDataUriRaw.replace(/"/g, '%22');
+
+            const offlineIcon = L.divIcon({
+                className: 'custom-plane-icon',
+                html: `<div class="plane-icon" style="transform: rotate(${heading}deg); background-image: url('${svgDataUri}'); opacity: 0.8;"></div>`,
+                iconSize: [32, 32],
+                iconAnchor: [16, 16],
+                popupAnchor: [0, -16]
+            });
+
+            historicalMarker = L.marker(latestPos, { icon: offlineIcon, zIndexOffset: 1000 }).addTo(map);
+
+            const displayCallsign = callsign ? `<b>${callsign}</b> (${hex})` : `<b>${hex}</b>`;
+            historicalMarker.bindPopup(`<div style="color: #94a3b8; font-family: 'Inter', sans-serif; padding: 5px; text-align: center;">${displayCallsign}<br><span style="font-size: 0.85em;">Offline. Last known location.</span></div>`).openPopup();
         }
     } catch (error) {
         console.error('Failed to load history:', error);

@@ -299,7 +299,7 @@ def search_aircraft():
                 SELECT hex, callsign, lat, lon, altitude, timestamp as last_seen 
                 FROM (
                     SELECT hex, callsign, lat, lon, altitude, timestamp,
-                           ROW_NUMBER() OVER(PARTITION BY hex ORDER BY timestamp DESC) as rn
+                           ROW_NUMBER() OVER(PARTITION BY hex, callsign ORDER BY timestamp DESC) as rn
                     FROM aircraft_history
                     WHERE callsign { 'ILIKE' if DB_TYPE == 'postgres' else 'LIKE' } ? 
                        OR hex { 'ILIKE' if DB_TYPE == 'postgres' else 'LIKE' } ?
@@ -316,18 +316,36 @@ def search_aircraft():
 @app.route('/api/history')
 def get_aircraft_history():
     hex_code = request.args.get('hex', '').strip().lower()
-    if not hex_code:
+    callsign = request.args.get('callsign', '').strip()
+    if not hex_code and not callsign:
         return jsonify([])
         
     try:
         with get_db_connection() as conn:
-            query_sql = '''
-                SELECT lat, lon, altitude, heading, timestamp 
-                FROM aircraft_history 
-                WHERE hex = ? 
-                ORDER BY timestamp ASC
-            '''
-            results = execute_query(conn, query_sql, (hex_code,))
+            if hex_code and callsign:
+                query_sql = '''
+                    SELECT lat, lon, altitude, heading, timestamp, callsign, hex 
+                    FROM aircraft_history 
+                    WHERE hex = ? AND TRIM(callsign) = ? 
+                    ORDER BY timestamp ASC
+                '''
+                results = execute_query(conn, query_sql, (hex_code, callsign))
+            elif hex_code:
+                query_sql = '''
+                    SELECT lat, lon, altitude, heading, timestamp, callsign, hex 
+                    FROM aircraft_history 
+                    WHERE hex = ? 
+                    ORDER BY timestamp ASC
+                '''
+                results = execute_query(conn, query_sql, (hex_code,))
+            else:
+                query_sql = '''
+                    SELECT lat, lon, altitude, heading, timestamp, callsign, hex 
+                    FROM aircraft_history 
+                    WHERE TRIM(callsign) = ? 
+                    ORDER BY timestamp ASC
+                '''
+                results = execute_query(conn, query_sql, (callsign,))
             return jsonify(results)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -355,20 +373,38 @@ def get_weather_deviations():
     try:
         with get_db_connection() as conn:
             cutoff = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time() - 3 * 3600))
-            query_sql = '''
-                WITH changes AS (
-                    SELECT hex, callsign, lat, lon, heading, altitude, timestamp,
-                           ABS(heading - LAG(heading) OVER (PARTITION BY hex ORDER BY timestamp)) as hc,
-                           ABS(altitude - LAG(altitude) OVER (PARTITION BY hex ORDER BY timestamp)) as ac
-                    FROM aircraft_history
-                    WHERE timestamp >= ?
-                )
-                SELECT hex, callsign, lat, lon, hc, ac, timestamp
-                FROM changes
-                WHERE (hc > 15 AND hc < 345) OR (ac > 1000)
-                ORDER BY timestamp DESC
-                LIMIT 500
-            '''
+            if DB_TYPE == "postgres":
+                query_sql = '''
+                    WITH changes AS (
+                        SELECT hex, callsign, lat, lon, heading, altitude, timestamp,
+                               ABS(heading - LAG(heading) OVER (PARTITION BY hex ORDER BY timestamp)) as hc,
+                               ABS(altitude - LAG(altitude) OVER (PARTITION BY hex ORDER BY timestamp)) as ac,
+                               EXTRACT(EPOCH FROM (timestamp - LAG(timestamp) OVER (PARTITION BY hex ORDER BY timestamp))) as gap_sec
+                        FROM aircraft_history
+                        WHERE timestamp >= %s
+                    )
+                    SELECT hex, callsign, lat, lon, hc, ac, timestamp
+                    FROM changes
+                    WHERE ((hc > 15 AND hc < 345) OR (ac > 1000)) AND (gap_sec IS NULL OR gap_sec <= 3600)
+                    ORDER BY timestamp DESC
+                    LIMIT 500
+                '''
+            else:
+                query_sql = '''
+                    WITH changes AS (
+                        SELECT hex, callsign, lat, lon, heading, altitude, timestamp,
+                               ABS(heading - LAG(heading) OVER (PARTITION BY hex ORDER BY timestamp)) as hc,
+                               ABS(altitude - LAG(altitude) OVER (PARTITION BY hex ORDER BY timestamp)) as ac,
+                               (strftime('%s', timestamp) - strftime('%s', LAG(timestamp) OVER (PARTITION BY hex ORDER BY timestamp))) as gap_sec
+                        FROM aircraft_history
+                        WHERE timestamp >= ?
+                    )
+                    SELECT hex, callsign, lat, lon, hc, ac, timestamp
+                    FROM changes
+                    WHERE ((hc > 15 AND hc < 345) OR (ac > 1000)) AND (gap_sec IS NULL OR gap_sec <= 3600)
+                    ORDER BY timestamp DESC
+                    LIMIT 500
+                '''
             results = execute_query(conn, query_sql, (cutoff,))
             return jsonify(results)
     except Exception as e:
