@@ -564,9 +564,11 @@ body:not(.is-zooming) .leaflet-marker-icon.custom-plane-icon {
     display: flex;
     align-items: center;
     gap: 16px;
+    pointer-events: auto !important;
 }
 
 .header-action-btn {
+    pointer-events: auto !important;
     background: linear-gradient(135deg, #0ea5e9, #2563eb);
     color: #ffffff;
     border: 1px solid rgba(255, 255, 255, 0.2);
