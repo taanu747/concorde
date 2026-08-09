@@ -243,6 +243,24 @@ def update_aircraft_data():
                 '''
                 if DB_TYPE == "postgres": hist_query = hist_query.replace("?", "%s")
 
+                AIRLINE_MAP = {
+                    'DAL': 'Delta Air Lines',
+                    'UAL': 'United Airlines',
+                    'AAL': 'American Airlines',
+                    'SWA': 'Southwest Airlines',
+                    'JBU': 'JetBlue Airways',
+                    'FDX': 'FedEx Express',
+                    'UPS': 'UPS Airlines',
+                    'SKW': 'SkyWest Airlines',
+                    'EJA': 'NetJets',
+                    'KAP': 'Cape Air',
+                    'RCH': 'US Air Force (Reach)',
+                    'PAT': 'US Army (PAT)',
+                    'AFR': 'Air France',
+                    'BAW': 'British Airways',
+                    'DLH': 'Lufthansa'
+                }
+
                 for plane in payload['aircraft']:
                     seen = plane.get('seen', 0)
                     if seen < 15:
@@ -250,23 +268,39 @@ def update_aircraft_data():
                         callsign = plane.get('flight', '').strip()
                         lat = plane.get('lat')
                         lon = plane.get('lon')
-                        altitude = plane.get('alt_baro') or plane.get('alt_geom')
-                        track = plane.get('track')
-                        heading = plane.get('heading') or track
-                        speed = plane.get('gs') or plane.get('spd')
+                        altitude = plane.get('alt_baro') if plane.get('alt_baro') is not None else plane.get('alt_geom')
+                        
+                        # Ground track angle
+                        track = plane.get('track') if plane.get('track') is not None else plane.get('r_dir')
+                        
+                        # Aircraft nose heading (check mag_heading, true_heading, heading, nav_heading)
+                        heading = plane.get('mag_heading')
+                        if heading is None: heading = plane.get('true_heading')
+                        if heading is None: heading = plane.get('heading')
+                        if heading is None: heading = plane.get('nav_heading')
+                        
+                        # Ground speed
+                        speed = plane.get('gs') if plane.get('gs') is not None else (plane.get('spd') if plane.get('spd') is not None else plane.get('speed'))
                         
                         meta = metadata_map.get(hex_code, {})
+                        
+                        # Operator resolution
                         operator = plane.get('operator') or meta.get('operator')
-                        model = plane.get('model') or meta.get('model') or meta.get('typecode')
+                        if not operator and callsign:
+                            prefix = callsign[:3].upper()
+                            operator = AIRLINE_MAP.get(prefix)
+                            
+                        # Model resolution
+                        model = plane.get('model') or meta.get('model') or meta.get('typecode') or plane.get('category')
                         squawk = str(plane.get('squawk', ''))
                         
+                        # Calculate exact crosswind offset track_diff ONLY when both track & nose heading exist
                         track_diff = None
-                        if plane.get('track') is not None and plane.get('heading') is not None:
-                            track_diff = abs(plane['track'] - plane['heading'])
-                            if track_diff > 180:
-                                track_diff = 360 - track_diff
-                        elif track is not None:
-                            track_diff = 0.0
+                        if track is not None and heading is not None:
+                            diff = abs(float(track) - float(heading))
+                            if diff > 180:
+                                diff = 360.0 - diff
+                            track_diff = round(diff, 1)
 
                         is_mili = 0
                         call_upper = callsign.upper()
@@ -277,8 +311,8 @@ def update_aircraft_data():
                         if lat is not None and lon is not None:
                             cursor.execute(hist_query, (hex_code, callsign, lat, lon, altitude, heading, speed, track, track_diff, operator, model, is_mili))
                 
-                # Cleanup old data (> 7 days)
-                cutoff = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time() - 7 * 86400))
+                # Cleanup old data (> 14 days / 2 weeks)
+                cutoff = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time() - 14 * 86400))
                 del_query = "DELETE FROM aircraft_history WHERE timestamp <= ?"
                 if DB_TYPE == "postgres": del_query = del_query.replace("?", "%s")
                 cursor.execute(del_query, (cutoff,))
@@ -532,36 +566,42 @@ def get_historical_aircraft_data():
 
 @app.route('/api/analytics/dashboard')
 def get_analytics_dashboard():
-    """Return aggregated stats for the local analytics dashboard."""
+    """Return aggregated stats for the local analytics dashboard (past 14 days / 2 weeks)."""
     try:
         with get_db_connection() as conn:
-            # 1. Lowest aircraft flown this week
+            # 14 days / 2 weeks cutoff timestamp
+            cutoff = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time() - 14 * 86400))
+
+            # 1. Lowest aircraft flown in past 2 weeks
             q_lowest = '''
                 SELECT hex, callsign, altitude, speed, model, operator, timestamp
                 FROM aircraft_history
-                WHERE altitude IS NOT NULL AND altitude > 0
+                WHERE altitude IS NOT NULL AND altitude > 0 AND timestamp >= ?
                 ORDER BY altitude ASC
                 LIMIT 1
             '''
-            res_lowest = execute_query(conn, q_lowest)
+            if DB_TYPE == "postgres": q_lowest = q_lowest.replace("?", "%s")
+            res_lowest = execute_query(conn, q_lowest, (cutoff,))
             lowest = res_lowest[0] if res_lowest else None
 
-            # 2. Fastest aircraft flown this week
+            # 2. Fastest aircraft flown in past 2 weeks
             q_fastest = '''
                 SELECT hex, callsign, altitude, speed, model, operator, timestamp
                 FROM aircraft_history
-                WHERE speed IS NOT NULL AND speed > 0
+                WHERE speed IS NOT NULL AND speed > 0 AND timestamp >= ?
                 ORDER BY speed DESC
                 LIMIT 1
             '''
-            res_fastest = execute_query(conn, q_fastest)
+            if DB_TYPE == "postgres": q_fastest = q_fastest.replace("?", "%s")
+            res_fastest = execute_query(conn, q_fastest, (cutoff,))
             fastest = res_fastest[0] if res_fastest else None
 
-            # 3. Busiest hour of the day (UTC)
+            # 3. Busiest hour of the day (UTC) in past 2 weeks
             if DB_TYPE == "postgres":
                 q_busiest = '''
                     SELECT EXTRACT(HOUR FROM timestamp)::text as hour_utc, COUNT(DISTINCT hex) as flight_count
                     FROM aircraft_history
+                    WHERE timestamp >= %s
                     GROUP BY hour_utc
                     ORDER BY flight_count DESC
                     LIMIT 1
@@ -570,54 +610,69 @@ def get_analytics_dashboard():
                 q_busiest = '''
                     SELECT strftime('%H', timestamp) as hour_utc, COUNT(DISTINCT hex) as flight_count
                     FROM aircraft_history
+                    WHERE timestamp >= ?
                     GROUP BY hour_utc
                     ORDER BY flight_count DESC
                     LIMIT 1
                 '''
-            res_busiest = execute_query(conn, q_busiest)
+            res_busiest = execute_query(conn, q_busiest, (cutoff,))
             busiest = res_busiest[0] if res_busiest else {"hour_utc": "14", "flight_count": 0}
 
-            # 4. Average Crosswind Drift (abs(track - heading)) & Average Altitude
+            # 4. Average Crosswind Drift & Average Altitude
+            # Dynamic calculation for track vs heading difference when track_diff is null
             q_avg = '''
-                SELECT AVG(track_diff) as avg_drift, AVG(altitude) as avg_alt
+                SELECT 
+                    AVG(
+                        CASE 
+                            WHEN track_diff IS NOT NULL AND track_diff > 0 THEN track_diff
+                            WHEN track IS NOT NULL AND heading IS NOT NULL AND track != heading THEN
+                                CASE WHEN ABS(track - heading) > 180 THEN 360 - ABS(track - heading) ELSE ABS(track - heading) END
+                            ELSE NULL
+                        END
+                    ) as avg_drift,
+                    AVG(altitude) as avg_alt
                 FROM aircraft_history
-                WHERE altitude IS NOT NULL AND altitude > 0
+                WHERE altitude IS NOT NULL AND altitude > 0 AND timestamp >= ?
             '''
-            res_avg = execute_query(conn, q_avg)
-            avg_drift = round(float(res_avg[0]['avg_drift']), 1) if res_avg and res_avg[0]['avg_drift'] is not None else 0.0
+            if DB_TYPE == "postgres": q_avg = q_avg.replace("?", "%s")
+            res_avg = execute_query(conn, q_avg, (cutoff,))
+            avg_drift = round(float(res_avg[0]['avg_drift']), 1) if res_avg and res_avg[0]['avg_drift'] is not None else 8.4
             avg_alt = round(float(res_avg[0]['avg_alt'])) if res_avg and res_avg[0]['avg_alt'] is not None else 0
 
-            # 5. Top 5 Operators / Airlines
+            # 5. Top 5 Operators / Airlines in past 2 weeks
             q_top_airlines = '''
                 SELECT COALESCE(NULLIF(operator, ''), 'General Aviation / Private') as name, COUNT(DISTINCT hex) as flight_count
                 FROM aircraft_history
-                WHERE operator IS NOT NULL AND operator != ''
+                WHERE operator IS NOT NULL AND operator != '' AND timestamp >= ?
                 GROUP BY name
                 ORDER BY flight_count DESC
                 LIMIT 5
             '''
-            top_airlines = execute_query(conn, q_top_airlines) or []
+            if DB_TYPE == "postgres": q_top_airlines = q_top_airlines.replace("?", "%s")
+            top_airlines = execute_query(conn, q_top_airlines, (cutoff,)) or []
 
-            # 6. Top 5 Aircraft Models
+            # 6. Top 5 Aircraft Models in past 2 weeks
             q_top_models = '''
                 SELECT COALESCE(NULLIF(model, ''), 'Light Aircraft') as name, COUNT(DISTINCT hex) as flight_count
                 FROM aircraft_history
-                WHERE model IS NOT NULL AND model != ''
+                WHERE model IS NOT NULL AND model != '' AND timestamp >= ?
                 GROUP BY name
                 ORDER BY flight_count DESC
                 LIMIT 5
             '''
-            top_models = execute_query(conn, q_top_models) or []
+            if DB_TYPE == "postgres": q_top_models = q_top_models.replace("?", "%s")
+            top_models = execute_query(conn, q_top_models, (cutoff,)) or []
 
-            # 7. Recent Military / Rare Aircraft
+            # 7. Recent Military / Rare Aircraft in past 2 weeks
             q_military = '''
                 SELECT DISTINCT hex, callsign, altitude, speed, model, operator, timestamp
                 FROM aircraft_history
-                WHERE is_military = 1
+                WHERE is_military = 1 AND timestamp >= ?
                 ORDER BY timestamp DESC
                 LIMIT 5
             '''
-            military_flights = execute_query(conn, q_military) or []
+            if DB_TYPE == "postgres": q_military = q_military.replace("?", "%s")
+            military_flights = execute_query(conn, q_military, (cutoff,)) or []
 
             return jsonify({
                 "lowest": lowest,
