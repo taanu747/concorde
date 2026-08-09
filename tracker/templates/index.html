@@ -21,9 +21,12 @@
 
     <div id="header">
         <h1>Live Local ADS-B Flight Tracker</h1>
-        <div id="status-indicator">
-            <span id="aircraft-count" style="margin-right: 12px; font-weight: 600; color: #cbd5e1;">0 Aircraft</span>
-            <span class="dot live"></span> Live Data
+        <div id="header-right">
+            <button id="analytics-btn" class="header-action-btn">📊 Airspace Analytics</button>
+            <div id="status-indicator">
+                <span id="aircraft-count" style="margin-right: 12px; font-weight: 600; color: #cbd5e1;">0 Aircraft</span>
+                <span class="dot live"></span> Live Data
+            </div>
         </div>
     </div>
 
@@ -103,6 +106,64 @@
     <!-- Leaflet.heat plugin -->
     <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 
+
+    <!-- Analytics Modal Overlay -->
+    <div id="analytics-modal" class="modal-hidden">
+        <div class="analytics-modal-content">
+            <div class="analytics-modal-header">
+                <h2>📊 Airspace Intelligence & Analytics</h2>
+                <button id="analytics-close-btn">&times;</button>
+            </div>
+            <div class="analytics-modal-body">
+                <!-- KPI Grid -->
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <span class="kpi-label">Lowest Flight This Week</span>
+                        <div class="kpi-value" id="kpi-lowest-alt">--</div>
+                        <span class="kpi-sub" id="kpi-lowest-info">Loading...</span>
+                    </div>
+                    <div class="kpi-card">
+                        <span class="kpi-label">Fastest Speed Recorded</span>
+                        <div class="kpi-value" id="kpi-fastest-spd">--</div>
+                        <span class="kpi-sub" id="kpi-fastest-info">Loading...</span>
+                    </div>
+                    <div class="kpi-card">
+                        <span class="kpi-label">Busiest Flight Hour</span>
+                        <div class="kpi-value" id="kpi-busiest-hour">--</div>
+                        <span class="kpi-sub" id="kpi-busiest-count">Loading...</span>
+                    </div>
+                    <div class="kpi-card">
+                        <span class="kpi-label">Avg Crosswind Drift (Wind Offset)</span>
+                        <div class="kpi-value" id="kpi-avg-drift">--</div>
+                        <span class="kpi-sub">Track vs Nose Heading difference</span>
+                    </div>
+                    <div class="kpi-card">
+                        <span class="kpi-label">Avg Local Flight Altitude</span>
+                        <div class="kpi-value" id="kpi-avg-alt">--</div>
+                        <span class="kpi-sub">Mean altitude over 7 days</span>
+                    </div>
+                </div>
+
+                <!-- Breakdown Panels -->
+                <div class="analytics-sections-grid">
+                    <div class="analytics-panel">
+                        <h3>Top Airlines / Operators</h3>
+                        <div id="top-airlines-list" class="rank-list">Loading...</div>
+                    </div>
+                    <div class="analytics-panel">
+                        <h3>Top Aircraft Models</h3>
+                        <div id="top-models-list" class="rank-list">Loading...</div>
+                    </div>
+                </div>
+
+                <!-- Military & Rare Aircraft Feed -->
+                <div class="analytics-panel full-width">
+                    <h3>🎖️ Recent Military & Special Flights</h3>
+                    <div id="military-feed-list" class="military-grid">Loading...</div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Custom JS -->
     <script src="{{ url_for('static', filename='app.js') }}?v={{ ts }}"></script>

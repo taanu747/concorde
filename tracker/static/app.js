@@ -1321,3 +1321,124 @@ map.on('moveend zoomend', () => {
         fetchOpenMeteoWindGrid();
     }
 });
+
+// --- Airspace Analytics Dashboard Modal ---
+const analyticsModal = document.getElementById('analytics-modal');
+const analyticsBtn = document.getElementById('analytics-btn');
+const analyticsCloseBtn = document.getElementById('analytics-close-btn');
+
+const loadAnalyticsDashboard = async () => {
+    try {
+        const res = await fetch('/api/analytics/dashboard');
+        const data = await res.json();
+
+        // 1. Lowest Aircraft
+        const lowestAltEl = document.getElementById('kpi-lowest-alt');
+        const lowestInfoEl = document.getElementById('kpi-lowest-info');
+        if (data.lowest) {
+            lowestAltEl.textContent = `${data.lowest.altitude.toLocaleString()} ft`;
+            const cs = data.lowest.callsign || data.lowest.hex;
+            const model = data.lowest.model ? ` (${data.lowest.model})` : '';
+            lowestInfoEl.textContent = `${cs}${model}`;
+        } else {
+            lowestAltEl.textContent = '--';
+            lowestInfoEl.textContent = 'No data recorded yet';
+        }
+
+        // 2. Fastest Aircraft
+        const fastestSpdEl = document.getElementById('kpi-fastest-spd');
+        const fastestInfoEl = document.getElementById('kpi-fastest-info');
+        if (data.fastest) {
+            fastestSpdEl.textContent = `${Math.round(data.fastest.speed)} kts`;
+            const cs = data.fastest.callsign || data.fastest.hex;
+            const model = data.fastest.model ? ` (${data.fastest.model})` : '';
+            fastestInfoEl.textContent = `${cs}${model}`;
+        } else {
+            fastestSpdEl.textContent = '--';
+            fastestInfoEl.textContent = 'No data recorded yet';
+        }
+
+        // 3. Busiest Hour
+        const busiestHourEl = document.getElementById('kpi-busiest-hour');
+        const busiestCountEl = document.getElementById('kpi-busiest-count');
+        if (data.busiest) {
+            const hr = String(data.busiest.hour_utc || '0').padStart(2, '0');
+            busiestHourEl.textContent = `${hr}:00 UTC`;
+            busiestCountEl.textContent = `${data.busiest.flight_count} flights recorded`;
+        } else {
+            busiestHourEl.textContent = '--';
+            busiestCountEl.textContent = 'No data recorded yet';
+        }
+
+        // 4. Avg Crosswind Drift & Avg Altitude
+        document.getElementById('kpi-avg-drift').textContent = `${data.avg_drift || 0}°`;
+        document.getElementById('kpi-avg-alt').textContent = data.avg_alt ? `${data.avg_alt.toLocaleString()} ft` : '--';
+
+        // 5. Top Airlines List
+        const airlinesListEl = document.getElementById('top-airlines-list');
+        if (data.top_airlines && data.top_airlines.length > 0) {
+            airlinesListEl.innerHTML = data.top_airlines.map(item => `
+                <div class="rank-item">
+                    <span class="rank-name">${item.name}</span>
+                    <span class="rank-count">${item.flight_count} flights</span>
+                </div>
+            `).join('');
+        } else {
+            airlinesListEl.innerHTML = '<div style="color:#94a3b8; font-size:12px;">No airline data recorded yet</div>';
+        }
+
+        // 6. Top Aircraft Models
+        const modelsListEl = document.getElementById('top-models-list');
+        if (data.top_models && data.top_models.length > 0) {
+            modelsListEl.innerHTML = data.top_models.map(item => `
+                <div class="rank-item">
+                    <span class="rank-name">${item.name}</span>
+                    <span class="rank-count">${item.flight_count} flights</span>
+                </div>
+            `).join('');
+        } else {
+            modelsListEl.innerHTML = '<div style="color:#94a3b8; font-size:12px;">No model data recorded yet</div>';
+        }
+
+        // 7. Military / Rare Aircraft Feed
+        const militaryFeedEl = document.getElementById('military-feed-list');
+        if (data.military_flights && data.military_flights.length > 0) {
+            militaryFeedEl.innerHTML = data.military_flights.map(m => `
+                <div class="military-card">
+                    <div class="military-card-header">
+                        <span>${m.callsign || m.hex}</span>
+                        <span>${m.altitude ? Math.round(m.altitude) + ' ft' : ''}</span>
+                    </div>
+                    <div class="military-card-details">
+                        ${m.model || m.operator || 'Military / Special Operation'} (${m.hex})
+                    </div>
+                </div>
+            `).join('');
+        } else {
+            militaryFeedEl.innerHTML = '<div style="color:#94a3b8; font-size:12px; grid-column: 1 / -1;">No military or special operations detected in the area this week</div>';
+        }
+    } catch (err) {
+        console.error("Failed to load analytics dashboard", err);
+    }
+};
+
+if (analyticsBtn && analyticsModal) {
+    analyticsBtn.addEventListener('click', () => {
+        analyticsModal.classList.remove('modal-hidden');
+        loadAnalyticsDashboard();
+    });
+}
+
+if (analyticsCloseBtn && analyticsModal) {
+    analyticsCloseBtn.addEventListener('click', () => {
+        analyticsModal.classList.add('modal-hidden');
+    });
+}
+
+if (analyticsModal) {
+    analyticsModal.addEventListener('click', (e) => {
+        if (e.target === analyticsModal) {
+            analyticsModal.classList.add('modal-hidden');
+        }
+    });
+}
