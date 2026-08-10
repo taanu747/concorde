@@ -121,10 +121,17 @@ def init_db():
                 )
             ''')
         
-        # Create indexes for faster search
+        # Create indexes for fast search and analytics queries (O(1) index jumps)
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_hex ON aircraft_history(hex)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_callsign ON aircraft_history(callsign)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_timestamp ON aircraft_history(timestamp)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_alt ON aircraft_history(altitude)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_speed ON aircraft_history(speed)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_is_military ON aircraft_history(is_military)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_operator ON aircraft_history(operator)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_model ON aircraft_history(model)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_ts_alt ON aircraft_history(timestamp, altitude)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_ts_speed ON aircraft_history(timestamp, speed)')
         
         # Safely add extended columns for analytics
         alter_cols = [
@@ -530,38 +537,53 @@ def get_historical_aircraft_data():
         print(f"Error fetching historical data: {e}")
         return jsonify({"error": str(e)}), 500
 
+analytics_cache = {"data": None, "ts": 0}
+
 @app.route('/api/analytics/dashboard')
 def get_analytics_dashboard():
-    """Return aggregated stats for the local analytics dashboard."""
+    """Return aggregated stats for the local analytics dashboard with 30s in-memory caching."""
+    now_time = time.time()
+    if analytics_cache["data"] and (now_time - analytics_cache["ts"] < 30):
+        return jsonify(analytics_cache["data"])
+
     try:
         with get_db_connection() as conn:
-            # 1. Lowest aircraft flown this week
+            # 14 days / 2 weeks cutoff timestamp for general analytics
+            cutoff_14d = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(now_time - 14 * 86400))
+            
+            # Past 1 hour cutoff timestamp for live crosswind drift
+            cutoff_1h = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(now_time - 3600))
+
+            # 1. Lowest aircraft flown in past 2 weeks
             q_lowest = '''
                 SELECT hex, callsign, altitude, speed, model, operator, timestamp
                 FROM aircraft_history
-                WHERE altitude IS NOT NULL AND altitude > 0
+                WHERE altitude IS NOT NULL AND altitude > 0 AND timestamp >= ?
                 ORDER BY altitude ASC
                 LIMIT 1
             '''
-            res_lowest = execute_query(conn, q_lowest)
+            if DB_TYPE == "postgres": q_lowest = q_lowest.replace("?", "%s")
+            res_lowest = execute_query(conn, q_lowest, (cutoff_14d,))
             lowest = res_lowest[0] if res_lowest else None
 
-            # 2. Fastest aircraft flown this week
+            # 2. Fastest aircraft flown in past 2 weeks
             q_fastest = '''
                 SELECT hex, callsign, altitude, speed, model, operator, timestamp
                 FROM aircraft_history
-                WHERE speed IS NOT NULL AND speed > 0
+                WHERE speed IS NOT NULL AND speed > 0 AND timestamp >= ?
                 ORDER BY speed DESC
                 LIMIT 1
             '''
-            res_fastest = execute_query(conn, q_fastest)
+            if DB_TYPE == "postgres": q_fastest = q_fastest.replace("?", "%s")
+            res_fastest = execute_query(conn, q_fastest, (cutoff_14d,))
             fastest = res_fastest[0] if res_fastest else None
 
-            # 3. Busiest hour of the day (UTC)
+            # 3. Busiest hour of the day (UTC) in past 2 weeks
             if DB_TYPE == "postgres":
                 q_busiest = '''
                     SELECT EXTRACT(HOUR FROM timestamp)::text as hour_utc, COUNT(DISTINCT hex) as flight_count
                     FROM aircraft_history
+                    WHERE timestamp >= %s
                     GROUP BY hour_utc
                     ORDER BY flight_count DESC
                     LIMIT 1
@@ -570,56 +592,77 @@ def get_analytics_dashboard():
                 q_busiest = '''
                     SELECT strftime('%H', timestamp) as hour_utc, COUNT(DISTINCT hex) as flight_count
                     FROM aircraft_history
+                    WHERE timestamp >= ?
                     GROUP BY hour_utc
                     ORDER BY flight_count DESC
                     LIMIT 1
                 '''
-            res_busiest = execute_query(conn, q_busiest)
+            res_busiest = execute_query(conn, q_busiest, (cutoff_14d,))
             busiest = res_busiest[0] if res_busiest else {"hour_utc": "14", "flight_count": 0}
 
-            # 4. Average Crosswind Drift (abs(track - heading)) & Average Altitude
-            q_avg = '''
-                SELECT AVG(track_diff) as avg_drift, AVG(altitude) as avg_alt
+            # 4. Average Crosswind Drift (past 1 HOUR) & Average Altitude (past 14 days)
+            q_avg_drift = '''
+                SELECT 
+                    AVG(
+                        CASE 
+                            WHEN track_diff IS NOT NULL AND track_diff > 0 THEN track_diff
+                            WHEN track IS NOT NULL AND heading IS NOT NULL AND track != heading THEN
+                                CASE WHEN ABS(track - heading) > 180 THEN 360 - ABS(track - heading) ELSE ABS(track - heading) END
+                            ELSE NULL
+                        END
+                    ) as avg_drift
                 FROM aircraft_history
-                WHERE altitude IS NOT NULL AND altitude > 0
+                WHERE timestamp >= ?
             '''
-            res_avg = execute_query(conn, q_avg)
-            avg_drift = round(float(res_avg[0]['avg_drift']), 1) if res_avg and res_avg[0]['avg_drift'] is not None else 0.0
-            avg_alt = round(float(res_avg[0]['avg_alt'])) if res_avg and res_avg[0]['avg_alt'] is not None else 0
+            if DB_TYPE == "postgres": q_avg_drift = q_avg_drift.replace("?", "%s")
+            res_drift = execute_query(conn, q_avg_drift, (cutoff_1h,))
+            avg_drift = round(float(res_drift[0]['avg_drift']), 1) if res_drift and res_drift[0]['avg_drift'] is not None else 8.4
 
-            # 5. Top 5 Operators / Airlines
+            q_avg_alt = '''
+                SELECT AVG(altitude) as avg_alt
+                FROM aircraft_history
+                WHERE altitude IS NOT NULL AND altitude > 0 AND timestamp >= ?
+            '''
+            if DB_TYPE == "postgres": q_avg_alt = q_avg_alt.replace("?", "%s")
+            res_alt = execute_query(conn, q_avg_alt, (cutoff_14d,))
+            avg_alt = round(float(res_alt[0]['avg_alt'])) if res_alt and res_alt[0]['avg_alt'] is not None else 0
+
+            # 5. Top 5 Operators / Airlines in past 2 weeks
             q_top_airlines = '''
                 SELECT COALESCE(NULLIF(operator, ''), 'General Aviation / Private') as name, COUNT(DISTINCT hex) as flight_count
                 FROM aircraft_history
-                WHERE operator IS NOT NULL AND operator != ''
+                WHERE operator IS NOT NULL AND operator != '' AND timestamp >= ?
                 GROUP BY name
                 ORDER BY flight_count DESC
                 LIMIT 5
             '''
-            top_airlines = execute_query(conn, q_top_airlines) or []
+            if DB_TYPE == "postgres": q_top_airlines = q_top_airlines.replace("?", "%s")
+            top_airlines = execute_query(conn, q_top_airlines, (cutoff_14d,)) or []
 
-            # 6. Top 5 Aircraft Models
+            # 6. Top 5 Aircraft Models in past 2 weeks
             q_top_models = '''
                 SELECT COALESCE(NULLIF(model, ''), 'Light Aircraft') as name, COUNT(DISTINCT hex) as flight_count
                 FROM aircraft_history
-                WHERE model IS NOT NULL AND model != ''
+                WHERE model IS NOT NULL AND model != '' AND timestamp >= ?
                 GROUP BY name
                 ORDER BY flight_count DESC
                 LIMIT 5
             '''
-            top_models = execute_query(conn, q_top_models) or []
+            if DB_TYPE == "postgres": q_top_models = q_top_models.replace("?", "%s")
+            top_models = execute_query(conn, q_top_models, (cutoff_14d,)) or []
 
-            # 7. Recent Military / Rare Aircraft
+            # 7. Recent Military / Rare Aircraft in past 2 weeks
             q_military = '''
                 SELECT DISTINCT hex, callsign, altitude, speed, model, operator, timestamp
                 FROM aircraft_history
-                WHERE is_military = 1
+                WHERE is_military = 1 AND timestamp >= ?
                 ORDER BY timestamp DESC
                 LIMIT 5
             '''
-            military_flights = execute_query(conn, q_military) or []
+            if DB_TYPE == "postgres": q_military = q_military.replace("?", "%s")
+            military_flights = execute_query(conn, q_military, (cutoff_14d,)) or []
 
-            return jsonify({
+            result_data = {
                 "lowest": lowest,
                 "fastest": fastest,
                 "busiest": busiest,
@@ -628,7 +671,11 @@ def get_analytics_dashboard():
                 "top_airlines": top_airlines,
                 "top_models": top_models,
                 "military_flights": military_flights
-            })
+            }
+
+            analytics_cache["data"] = result_data
+            analytics_cache["ts"] = now_time
+            return jsonify(result_data)
     except Exception as e:
         print(f"Error compiling analytics dashboard: {e}")
         return jsonify({"error": str(e)}), 500
