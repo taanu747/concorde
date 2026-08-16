@@ -38,62 +38,60 @@
 
     <!-- Time Travel Container -->
     <div id="history-control-container">
-        <h3>Time Travel (UTC)</h3>
-        <input type="datetime-local" id="history-time-input">
-        <div class="history-actions">
-            <button id="history-submit-btn">Query Time</button>
-            <button id="history-play-btn" style="display: none;">Play</button>
-            <button id="history-live-btn" style="display: none;">Return to Live</button>
+        <div id="history-control-header">
+            <h3>🕒 Time Travel (UTC)</h3>
+            <button id="history-toggle-btn" class="icon-toggle-btn">&minus;</button>
+        </div>
+        <div id="history-control-body">
+            <input type="datetime-local" id="history-time-input">
+            <div class="history-actions">
+                <button id="history-submit-btn">Query Time</button>
+                <button id="history-play-btn" style="display: none;">Play</button>
+                <button id="history-live-btn" style="display: none;">Return to Live</button>
+            </div>
         </div>
     </div>
 
-    <!-- Weather Controls -->
-    <label id="weather-control" for="weather-toggle">
-        <input type="checkbox" id="weather-toggle">
-        Weather Radar
-    </label>
+    <!-- Map Layers & Controls Dropdown -->
+    <div id="layers-dropdown-container">
+        <button id="layers-toggle-btn" class="layers-btn">
+            ⚙️ Map Layers
+        </button>
+        
+        <div id="layers-dropdown-menu" class="dropdown-hidden">
+            <div class="dropdown-section-title">Map Overlays</div>
+            <label for="weather-toggle" class="dropdown-item">
+                <input type="checkbox" id="weather-toggle"> Weather Radar
+            </label>
+            <label for="wind-toggle" class="dropdown-item">
+                <input type="checkbox" id="wind-toggle"> Wind Streamlines (Open-Meteo)
+            </label>
+            <label for="heatmap-toggle" class="dropdown-item">
+                <input type="checkbox" id="heatmap-toggle"> Heatmap (7d)
+            </label>
+            <label for="deviations-toggle" class="dropdown-item">
+                <input type="checkbox" id="deviations-toggle"> Deviations (3h)
+            </label>
 
-    <label id="wind-control" for="wind-toggle">
-        <input type="checkbox" id="wind-toggle">
-        Wind Streamlines (Open-Meteo)
-    </label>
+            <div class="dropdown-section-title">Display</div>
+            <label for="theme-toggle" class="dropdown-item">
+                <input type="checkbox" id="theme-toggle"> Dark Mode
+            </label>
 
-    <!-- Analytics Controls -->
-    <label id="heatmap-control" for="heatmap-toggle">
-        <input type="checkbox" id="heatmap-toggle">
-        Heatmap (7d)
-    </label>
-    
-    <label id="deviations-control" for="deviations-toggle">
-        <input type="checkbox" id="deviations-toggle">
-        Deviations (3h)
-    </label>
-
-    <!-- Theme Controls -->
-    <label id="theme-control" for="theme-toggle">
-        <input type="checkbox" id="theme-toggle">
-        Dark Mode
-    </label>
-
-    <!-- VFR & IFR Aeronautical Section -->
-    <div id="aero-section-container">
-        <h3>VFR & IFR Charts</h3>
-        <label for="vfr-sectional-toggle">
-            <input type="checkbox" id="vfr-sectional-toggle">
-            VFR Sectional
-        </label>
-        <label for="vfr-terminal-toggle">
-            <input type="checkbox" id="vfr-terminal-toggle">
-            VFR Terminal (TAC)
-        </label>
-        <label for="ifr-low-toggle">
-            <input type="checkbox" id="ifr-low-toggle">
-            IFR Low Airways
-        </label>
-        <label for="ifr-high-toggle">
-            <input type="checkbox" id="ifr-high-toggle">
-            IFR High Airways
-        </label>
+            <div class="dropdown-section-title">VFR & IFR Charts</div>
+            <label for="vfr-sectional-toggle" class="dropdown-item">
+                <input type="checkbox" id="vfr-sectional-toggle"> VFR Sectional
+            </label>
+            <label for="vfr-terminal-toggle" class="dropdown-item">
+                <input type="checkbox" id="vfr-terminal-toggle"> VFR Terminal (TAC)
+            </label>
+            <label for="ifr-low-toggle" class="dropdown-item">
+                <input type="checkbox" id="ifr-low-toggle"> IFR Low Airways
+            </label>
+            <label for="ifr-high-toggle" class="dropdown-item">
+                <input type="checkbox" id="ifr-high-toggle"> IFR High Airways
+            </label>
+        </div>
     </div>
 
     <!-- Map Container -->

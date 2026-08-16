@@ -1442,3 +1442,38 @@ if (analyticsModal) {
         }
     });
 }
+
+// --- Map Layers & History Dropdown Interactions ---
+const layersToggleBtn = document.getElementById('layers-toggle-btn');
+const layersDropdownMenu = document.getElementById('layers-dropdown-menu');
+const historyControlHeader = document.getElementById('history-control-header');
+const historyToggleBtn = document.getElementById('history-toggle-btn');
+const historyControlBody = document.getElementById('history-control-body');
+
+if (layersToggleBtn && layersDropdownMenu) {
+    layersToggleBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        layersDropdownMenu.classList.toggle('dropdown-hidden');
+    });
+
+    layersDropdownMenu.addEventListener('click', (e) => {
+        e.stopPropagation();
+    });
+}
+
+if (historyControlHeader && historyControlBody && historyToggleBtn) {
+    const toggleHistoryBody = (e) => {
+        e.stopPropagation();
+        const isCollapsed = historyControlBody.classList.toggle('collapsed');
+        historyToggleBtn.textContent = isCollapsed ? '+' : '−';
+    };
+
+    historyControlHeader.addEventListener('click', toggleHistoryBody);
+}
+
+// Close open dropdowns when clicking outside
+document.addEventListener('click', () => {
+    if (layersDropdownMenu && !layersDropdownMenu.classList.contains('dropdown-hidden')) {
+        layersDropdownMenu.classList.add('dropdown-hidden');
+    }
+});
