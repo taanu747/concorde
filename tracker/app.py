@@ -610,12 +610,17 @@ def get_analytics_dashboard():
             '''
             top_models = execute_query(conn, q_top_models) or []
 
-            # 7. Recent Military / Rare Aircraft
+            # 7. Recent Military / Rare Aircraft (Unique per aircraft hex)
             q_military = '''
-                SELECT DISTINCT hex, callsign, altitude, speed, model, operator, timestamp
-                FROM aircraft_history
-                WHERE is_military = 1
-                ORDER BY timestamp DESC
+                SELECT h.hex, h.callsign, h.altitude, h.speed, h.model, h.operator, h.timestamp
+                FROM aircraft_history h
+                INNER JOIN (
+                    SELECT hex, MAX(timestamp) as max_ts
+                    FROM aircraft_history
+                    WHERE is_military = 1
+                    GROUP BY hex
+                ) latest ON h.hex = latest.hex AND h.timestamp = latest.max_ts
+                ORDER BY h.timestamp DESC
                 LIMIT 5
             '''
             military_flights = execute_query(conn, q_military) or []
