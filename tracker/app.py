@@ -271,7 +271,9 @@ def update_aircraft_data():
                         is_mili = 0
                         call_upper = callsign.upper()
                         op_upper = (operator or '').upper()
-                        if squawk in ['7500', '7600', '7700'] or call_upper.startswith(('RCH', 'PAT', 'AF')) or any(kw in op_upper for kw in ['AIR FORCE', 'NAVY', 'ARMY', 'COAST GUARD', 'MARINE', 'MILITARY']):
+                        mili_prefixes = ('RCH', 'PAT', 'SAM', 'CNV', 'GOTO', 'FORTE', 'JEDI', 'VIPER', 'TUSK', 'BONE', 'SHUCK', 'DARK', 'EVAC')
+                        is_af_military = call_upper.startswith('AF') and not call_upper.startswith(('AFR', 'AFL', 'AFE', 'AFW'))
+                        if squawk in ['7500', '7600', '7700'] or call_upper.startswith(mili_prefixes) or is_af_military or any(kw in op_upper for kw in ['AIR FORCE', 'NAVY', 'ARMY', 'COAST GUARD', 'MARINES', 'MILITARY', 'LUFTWAFFE']):
                             is_mili = 1
 
                         if lat is not None and lon is not None:
@@ -617,7 +619,7 @@ def get_analytics_dashboard():
                 INNER JOIN (
                     SELECT hex, MAX(timestamp) as max_ts
                     FROM aircraft_history
-                    WHERE is_military = 1
+                    WHERE is_military = 1 AND (callsign IS NULL OR (callsign NOT LIKE 'AFR%' AND callsign NOT LIKE 'AFL%' AND callsign NOT LIKE 'AFE%'))
                     GROUP BY hex
                 ) latest ON h.hex = latest.hex AND h.timestamp = latest.max_ts
                 ORDER BY h.timestamp DESC
