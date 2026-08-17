@@ -1443,12 +1443,44 @@ if (analyticsModal) {
     });
 }
 
-// --- Map Layers & History Dropdown Interactions ---
+// --- Mobile Mode & Responsive Dropdown Interactions ---
 const layersToggleBtn = document.getElementById('layers-toggle-btn');
 const layersDropdownMenu = document.getElementById('layers-dropdown-menu');
 const historyControlHeader = document.getElementById('history-control-header');
 const historyToggleBtn = document.getElementById('history-toggle-btn');
 const historyControlBody = document.getElementById('history-control-body');
+const searchContainer = document.getElementById('search-container');
+const mobileSearchBtn = document.getElementById('mobile-search-btn');
+
+// Mobile detection
+const isMobileDevice = window.innerWidth <= 768 || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+
+if (isMobileDevice) {
+    // Automatically collapse Time Travel box on mobile load
+    if (historyControlBody && historyToggleBtn) {
+        historyControlBody.classList.add('collapsed');
+        historyToggleBtn.textContent = '+';
+    }
+    // Start search bar hidden on mobile until search button is tapped
+    if (searchContainer) {
+        searchContainer.classList.add('mobile-hidden');
+    }
+}
+
+// Mobile search button toggle
+if (mobileSearchBtn && searchContainer) {
+    mobileSearchBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isHidden = searchContainer.classList.toggle('mobile-hidden');
+        if (!isHidden) {
+            document.getElementById('search-bar')?.focus();
+        }
+    });
+
+    searchContainer.addEventListener('click', (e) => {
+        e.stopPropagation();
+    });
+}
 
 if (layersToggleBtn && layersDropdownMenu) {
     layersToggleBtn.addEventListener('click', (e) => {
@@ -1475,5 +1507,8 @@ if (historyControlHeader && historyControlBody && historyToggleBtn) {
 document.addEventListener('click', () => {
     if (layersDropdownMenu && !layersDropdownMenu.classList.contains('dropdown-hidden')) {
         layersDropdownMenu.classList.add('dropdown-hidden');
+    }
+    if (isMobileDevice && searchContainer && !searchContainer.classList.contains('mobile-hidden')) {
+        searchContainer.classList.add('mobile-hidden');
     }
 });

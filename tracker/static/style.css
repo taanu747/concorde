@@ -20,6 +20,10 @@ html {
     /* Keep map below the header overlay */
 }
 
+.mobile-only-btn {
+    display: none !important;
+}
+
 /* Header styled as a floating glassmorphism panel */
 #header {
     position: absolute;
@@ -469,50 +473,77 @@ body:not(.is-zooming) .leaflet-marker-icon.custom-plane-icon {
 
 /* Mobile & Narrow Screen Responsiveness */
 @media (max-width: 768px) {
+    .mobile-only-btn {
+        display: inline-flex !important;
+    }
+
     #header {
         top: 10px;
         left: 10px;
         right: 10px;
         transform: none;
         width: auto;
-        padding: 10px 14px;
+        height: 48px;
+        padding: 0 12px;
         flex-direction: row;
         justify-content: space-between;
+        align-items: center;
+        border-radius: 10px;
     }
 
-    #header h1 {
+    #header-title {
         font-size: 13px;
+        font-weight: 800;
+        white-space: nowrap;
     }
 
     #header-right {
-        gap: 8px;
+        gap: 6px;
+        display: flex;
+        align-items: center;
+        pointer-events: auto !important;
     }
 
     .header-action-btn {
-        padding: 4px 10px;
+        padding: 5px 9px;
         font-size: 11px;
+        white-space: nowrap;
+    }
+
+    .analytics-btn-text {
+        display: none;
     }
 
     #status-indicator {
-        font-size: 11px;
+        display: none !important;
     }
 
     #search-container {
         top: 65px;
-        right: 10px;
+        left: 50%;
+        transform: translateX(-50%);
         width: calc(100% - 20px);
         max-width: 360px;
+        z-index: 1100;
+        transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s ease;
+    }
+
+    #search-container.mobile-hidden {
+        opacity: 0;
+        visibility: hidden;
+        transform: translate(-50%, -10px);
+        pointer-events: none;
     }
 
     #layers-dropdown-container {
-        top: 115px;
+        top: 65px;
         left: 10px;
     }
 
     #layers-dropdown-menu {
         left: 0;
         right: auto;
-        width: 210px;
+        width: 220px;
     }
 
     #history-control-container {

@@ -20,12 +20,15 @@
 <body>
 
     <div id="header">
-        <h1>Live Local ADS-B Flight Tracker</h1>
+        <div id="header-left">
+            <h1 id="header-title">Live Local ADS-B Flight Tracker</h1>
+        </div>
         <div id="header-right">
-            <button id="analytics-btn" class="header-action-btn">📊 Airspace Analytics</button>
+            <button id="mobile-search-btn" class="header-action-btn mobile-only-btn" title="Search flights">🔍 Search</button>
+            <button id="analytics-btn" class="header-action-btn">📊 <span class="analytics-btn-text">Airspace Analytics</span></button>
             <div id="status-indicator">
-                <span id="aircraft-count" style="margin-right: 12px; font-weight: 600; color: #cbd5e1;">0 Aircraft</span>
-                <span class="dot live"></span> Live Data
+                <span id="aircraft-count">0 Aircraft</span>
+                <span class="dot live"></span> <span class="live-text">Live Data</span>
             </div>
         </div>
     </div>
