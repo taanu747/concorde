@@ -24,6 +24,14 @@ html {
     display: none !important;
 }
 
+.mobile-title {
+    display: none !important;
+}
+
+.desktop-title {
+    display: inline !important;
+}
+
 /* Header styled as a floating glassmorphism panel */
 #header {
     position: absolute;
@@ -477,24 +485,36 @@ body:not(.is-zooming) .leaflet-marker-icon.custom-plane-icon {
         display: inline-flex !important;
     }
 
+    .desktop-title {
+        display: none !important;
+    }
+
+    .mobile-title {
+        display: inline !important;
+        color: #10b981;
+        font-weight: 800;
+        font-size: 13px;
+        letter-spacing: 0.5px;
+    }
+
     #header {
         top: 10px;
         left: 10px;
         right: 10px;
         transform: none;
         width: auto;
-        height: 48px;
-        padding: 0 12px;
+        height: 46px;
+        padding: 0 10px;
         flex-direction: row;
         justify-content: space-between;
         align-items: center;
         border-radius: 10px;
+        z-index: 1050;
     }
 
-    #header-title {
-        font-size: 13px;
-        font-weight: 800;
-        white-space: nowrap;
+    #header-left {
+        display: flex;
+        align-items: center;
     }
 
     #header-right {
@@ -508,10 +528,11 @@ body:not(.is-zooming) .leaflet-marker-icon.custom-plane-icon {
         padding: 5px 9px;
         font-size: 11px;
         white-space: nowrap;
+        border-radius: 6px;
     }
 
     .analytics-btn-text {
-        display: none;
+        display: inline !important;
     }
 
     #status-indicator {
@@ -519,7 +540,7 @@ body:not(.is-zooming) .leaflet-marker-icon.custom-plane-icon {
     }
 
     #search-container {
-        top: 65px;
+        top: 64px;
         left: 50%;
         transform: translateX(-50%);
         width: calc(100% - 20px);
@@ -536,8 +557,9 @@ body:not(.is-zooming) .leaflet-marker-icon.custom-plane-icon {
     }
 
     #layers-dropdown-container {
-        top: 65px;
+        top: 64px;
         left: 10px;
+        z-index: 1000;
     }
 
     #layers-dropdown-menu {
