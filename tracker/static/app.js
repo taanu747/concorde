@@ -473,7 +473,7 @@ const generatePopupHTML = (plane) => {
                 <span class="stat-value" style="color: ${headingTextColor}; font-weight:700;">${heading}&deg; <span style="font-size:0.75em; color: #cbd5e1;">(Light Arrow)</span></span>
             </div>
 
-            <button class="ai-explain-btn" onclick="explainAircraftIntent('${plane.hex}')">
+            <button class="ai-explain-btn" data-hex="${plane.hex}">
                 🤖 Explain Flight Intent
             </button>
         </div>

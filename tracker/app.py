@@ -642,6 +642,14 @@ def get_analytics_dashboard():
         print(f"Error compiling analytics dashboard: {e}")
         return jsonify({"error": str(e)}), 500
 
+def safe_round(val, decimals=0):
+    try:
+        if val is None or val == 'ground' or val == '': return 0
+        r = round(float(val), decimals)
+        return int(r) if decimals == 0 else r
+    except Exception:
+        return 0
+
 @app.route('/api/ai/query', methods=['POST'])
 def ai_copilot_query():
     """AI Co-Pilot endpoint for natural language flight intent & database queries."""
@@ -657,34 +665,37 @@ def ai_copilot_query():
             # STEP 1: Callsign / Hex Extraction from User Prompt
             # -------------------------------------------------------------
             extracted_callsign = None
+            
+            # Check if query matches specific aviation callsign or hex pattern
             tokens = re.findall(r'\b[A-Za-z0-9]{3,8}\b', user_query.upper())
-            stop_words = {'WHY', 'WHAT', 'HOW', 'WHERE', 'WHEN', 'WHICH', 'IS', 'IN', 'THE', 'A', 'AN', 'OF', 'FOR', 'TO', 'ON', 'ARE', 'SO', 'MANY', 'LINE', 'LINES', 'HEATMAP', 'RADAR', 'WIND', 'DRIFT', 'MOST', 'COMMON', 'MODEL', 'AIRLINE', 'FLIGHT', 'PLANE', 'PLANES', 'THIS', 'THAT', 'PART'}
+            stop_words = {
+                'WHY', 'WHAT', 'HOW', 'WHERE', 'WHEN', 'WHICH', 'CAN', 'YOU', 'EXPLAIN', 'SHOW', 'LIST', 
+                'IS', 'ARE', 'WAS', 'WERE', 'BE', 'BEEN', 'BEING', 'IN', 'THE', 'A', 'AN', 'OF', 'FOR', 
+                'TO', 'ON', 'AT', 'BY', 'WITH', 'FROM', 'SO', 'MANY', 'LINE', 'LINES', 'HEATMAP', 
+                'RADAR', 'WIND', 'DRIFT', 'MOST', 'COMMON', 'MODEL', 'AIRLINE', 'FLIGHT', 'PLANE', 
+                'PLANES', 'THIS', 'THAT', 'PART', 'DOING', 'LOWEST', 'FASTEST', 'RECORDED', 'WEEK', 
+                'TODAY', 'AREA', 'SELECTED', 'JETWAY', 'AIRWAY', 'CLIMBING', 'DESCENDING', 'SPEED'
+            }
             candidates = [t for t in tokens if t not in stop_words and not t.isdigit() and len(t) >= 3]
             
             if candidates and not aircraft_state:
-                cand = candidates[0].strip()
-                # 1. Search live in-memory aircraft first
-                with lock:
-                    aircraft_dict = latest_payload.get('aircraft', {})
-                    if isinstance(aircraft_dict, dict):
-                        for hex_k, p in aircraft_dict.items():
+                for cand_raw in candidates:
+                    cand = cand_raw.strip()
+                    # Search live payload first
+                    with lock:
+                        aircraft_dict = latest_payload.get('aircraft', {})
+                        target_list = aircraft_dict.values() if isinstance(aircraft_dict, dict) else (aircraft_dict if isinstance(aircraft_dict, list) else [])
+                        for p in target_list:
                             cs = (p.get('flight') or p.get('callsign') or '').strip().upper()
                             hx = (p.get('hex') or '').strip().upper()
-                            if cand in cs or cand in hx:
+                            if cand == cs or cand == hx or (len(cand) >= 4 and (cand in cs or cand in hx)):
                                 aircraft_state = p
                                 extracted_callsign = cand
                                 break
-                    elif isinstance(aircraft_dict, list):
-                        for p in aircraft_dict:
-                            cs = (p.get('flight') or p.get('callsign') or '').strip().upper()
-                            hx = (p.get('hex') or '').strip().upper()
-                            if cand in cs or cand in hx:
-                                aircraft_state = p
-                                extracted_callsign = cand
-                                break
-
-                # 2. Search database history if not in active live feed
-                if not aircraft_state:
+                    
+                    if aircraft_state: break
+                    
+                    # Search DB if not in live feed
                     q_find = '''
                         SELECT hex, callsign, altitude, speed, track, heading, operator, model, is_military, timestamp
                         FROM aircraft_history
@@ -707,6 +718,7 @@ def ai_copilot_query():
                             "model": r['model']
                         }
                         extracted_callsign = cand
+                        break
 
             # -------------------------------------------------------------
             # STEP 2: Aircraft Intent Explanation ("Why is my flight doing that?")
@@ -714,8 +726,9 @@ def ai_copilot_query():
             if aircraft_state or extracted_callsign:
                 callsign = aircraft_state.get('flight') or aircraft_state.get('callsign') or aircraft_state.get('hex', 'Selected Aircraft')
                 hex_code = str(aircraft_state.get('hex', 'N/A')).upper()
-                alt = aircraft_state.get('alt_baro') if aircraft_state.get('alt_baro') is not None else (aircraft_state.get('altitude') or 0)
-                spd = aircraft_state.get('gs') if aircraft_state.get('gs') is not None else (aircraft_state.get('speed') or 0)
+                alt_raw = aircraft_state.get('alt_baro') if aircraft_state.get('alt_baro') is not None else (aircraft_state.get('altitude') or 0)
+                alt = safe_round(alt_raw)
+                spd = safe_round(aircraft_state.get('gs') if aircraft_state.get('gs') is not None else aircraft_state.get('speed'))
                 track = aircraft_state.get('track')
                 heading = aircraft_state.get('mag_heading') if aircraft_state.get('mag_heading') is not None else aircraft_state.get('heading')
                 model = aircraft_state.get('model') or aircraft_state.get('typecode') or 'Aircraft'
@@ -725,25 +738,27 @@ def ai_copilot_query():
                 explanations = []
                 
                 # Flight Phase & Altitude Intent
-                if alt == 'ground' or alt == 0:
+                if alt_raw == 'ground' or alt == 0:
                     explanations.append("<b>📍 Ground Operations / Taxi:</b> Aircraft is currently stationary or taxiing on airport aprons/runways.")
                 elif alt < 3000:
-                    explanations.append(f"<b>🛫 Initial Takeoff / Short Approach:</b> Flying at low altitude ({alt:,} ft) at {round(spd)} kts. Operating within immediate airport control zone for runway departure or final landing approach.")
+                    explanations.append(f"<b>🛫 Initial Takeoff / Short Approach:</b> Flying at low altitude ({alt:,} ft) at {spd} kts. Operating within immediate airport control zone for runway departure or final landing approach.")
                 elif alt >= 3000 and alt < 10000:
-                    explanations.append(f"<b>🏙️ Terminal Maneuvering Area (TMA):</b> Transiting terminal airspace ({alt:,} ft) at {round(spd)} kts. Air Traffic Control (ATC) restricts speed below 250 kts for safety and noise abatement during arrival/departure routing.")
+                    explanations.append(f"<b>🏙️ Terminal Maneuvering Area (TMA):</b> Transiting terminal airspace ({alt:,} ft) at {spd} kts. Air Traffic Control (ATC) restricts speed below 250 kts for safety and noise abatement during arrival/departure routing.")
                 elif alt >= 10000 and alt < 28000:
-                    explanations.append(f"<b>📈 Transition Climb / Descent:</b> Climbing or descending through intermediate flight levels ({alt:,} ft) at {round(spd)} kts between airport terminal zones and high-altitude airways.")
+                    explanations.append(f"<b>📈 Transition Climb / Descent:</b> Climbing or descending through intermediate flight levels ({alt:,} ft) at {spd} kts between airport terminal zones and high-altitude airways.")
                 else:
-                    explanations.append(f"<b>✈️ En-Route Jetway Cruise:</b> Cruising at high altitude ({alt:,} ft) at {round(spd)} kts. Following assigned Jet Airways in controlled upper airspace.")
+                    explanations.append(f"<b>✈️ En-Route Jetway Cruise:</b> Cruising at high altitude ({alt:,} ft) at {spd} kts. Following assigned Jet Airways in controlled upper airspace.")
 
                 # Atmospheric Wind & Crab Angle Offset
                 if track is not None and heading is not None:
-                    drift = abs(float(track) - float(heading))
+                    trk_val = safe_round(track, 1)
+                    hdg_val = safe_round(heading, 1)
+                    drift = abs(trk_val - hdg_val)
                     if drift > 180: drift = 360 - drift
                     if drift >= 2.5:
-                        explanations.append(f"<b>💨 Wind Drift Crab Compensation:</b> Pilot/Autopilot has offset nose heading ({round(heading)}°) by <b>{round(drift, 1)}°</b> relative to ground track ({round(track)}°) to compensate for atmospheric crosswinds.")
+                        explanations.append(f"<b>💨 Wind Drift Crab Compensation:</b> Pilot/Autopilot has offset nose heading ({hdg_val}°) by <b>{round(drift, 1)}°</b> relative to ground track ({trk_val}°) to compensate for atmospheric crosswinds.")
                     else:
-                        explanations.append(f"<b>🧭 Direct Track Alignment:</b> Heading ({round(heading)}°) aligns cleanly with ground track ({round(track)}°), experiencing direct headwind or tailwind.")
+                        explanations.append(f"<b>🧭 Direct Track Alignment:</b> Heading ({hdg_val}°) aligns cleanly with ground track ({trk_val}°), experiencing direct headwind or tailwind.")
 
                 # Special squawk / Military mission
                 if squawk in ['7500', '7600', '7700']:
@@ -751,15 +766,23 @@ def ai_copilot_query():
                 elif any(kw in (operator or '').upper() for kw in ['AIR FORCE', 'NAVY', 'ARMY', 'MILITARY']) or hex_code.startswith('AE'):
                     explanations.append("<b>🎖️ Tactical / Government Transport:</b> Military asset conducting training, logistical transport, or tactical airspace routing.")
 
-                full_text = f"Flight Intent Analysis for <b>{callsign.strip()}</b> ({model}):<br><br>" + "<br><br>".join(explanations)
+                full_text = f"Flight Intent Analysis for <b>{str(callsign).strip()}</b> ({model}):<br><br>" + "<br><br>".join(explanations)
                 return jsonify({
                     "type": "explanation",
                     "text": full_text
                 })
 
             # -------------------------------------------------------------
-            # STEP 3: Airspace & Map Feature Questions
+            # STEP 3: Aviation & Airspace Feature Knowledge Q&A
             # -------------------------------------------------------------
+            if "jetway" in query_lower or "airway" in query_lower:
+                return jsonify({
+                    "type": "explanation",
+                    "text": "<b>✈️ High-Altitude Jetways & Airways:</b><br><br>"
+                            "A <b>Jetway</b> (or VOR Jet Route / RNAV Q-Route) is an official high-altitude highway in the sky defined by Federal Aviation Administration (FAA) & ICAO navigation waypoints.<br><br>"
+                            "• Commercial airliners cruise along assigned Jetways between 18,000 ft and 45,000 ft under radar vectoring by Air Traffic Control (ATC)."
+                })
+
             if "heatmap" in query_lower or "line" in query_lower or "lines" in query_lower:
                 return jsonify({
                     "type": "explanation",
@@ -782,7 +805,7 @@ def ai_copilot_query():
                 q = "SELECT AVG(track_diff) as avg_drift FROM aircraft_history WHERE timestamp >= ?"
                 if DB_TYPE == "postgres": q = q.replace("?", "%s")
                 res = execute_query(conn, q, (cutoff_1h,))
-                drift_val = round(float(res[0]['avg_drift']), 1) if res and res[0]['avg_drift'] is not None else 8.4
+                drift_val = round(float(res[0]['avg_drift']), 1) if res and res[0] and res[0]['avg_drift'] is not None else 8.4
                 return jsonify({
                     "type": "explanation",
                     "text": f"<b>💨 Atmospheric Wind Vectors & Drift:</b><br><br>"
@@ -901,6 +924,7 @@ def ai_copilot_query():
                 "type": "explanation",
                 "text": f"I analyzed your airspace question: <i>\"{user_query}\"</i>.<br><br>"
                         "<b>Try asking:</b><br>"
+                        "• <i>\"What is a Jetway?\"</i><br>"
                         "• <i>\"Why are there lines in the heatmap?\"</i><br>"
                         "• <i>\"Which model is the most common?\"</i><br>"
                         "• Or select any plane on the map and tap <b>🤖 Explain Flight Intent</b>!"
@@ -908,7 +932,7 @@ def ai_copilot_query():
 
     except Exception as e:
         print(f"AI Co-Pilot query error: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"type": "explanation", "text": f"Sorry, I had trouble parsing that query. Try asking <b>\"What is a Jetway?\"</b> or select an aircraft and tap <b>🤖 Explain Flight Intent</b>."})
 
 if __name__ == '__main__':
     # Running securely on localhost port 8081 to avoid macOS AirPlay / port exhaustion collisions
