@@ -27,6 +27,7 @@
             </h1>
         </div>
         <div id="header-right">
+            <button id="ai-copilot-btn" class="header-action-btn highlight-ai-btn">🤖 <span class="ai-btn-text">AI Co-Pilot</span></button>
             <button id="mobile-search-btn" class="header-action-btn mobile-only-btn" title="Search flights">🔍 Search</button>
             <button id="analytics-btn" class="header-action-btn">📊 <span class="analytics-btn-text">Analytics</span></button>
             <div id="status-indicator">
@@ -165,6 +166,50 @@
                     <h3>🎖️ Recent Military & Special Flights</h3>
                     <div id="military-feed-list" class="military-grid">Loading...</div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Airspace Co-Pilot Sidebar -->
+    <div id="ai-sidebar">
+        <div class="ai-sidebar-header">
+            <div class="ai-sidebar-title">
+                <span class="ai-icon">🤖</span>
+                <div>
+                    <h3>AI Airspace Co-Pilot</h3>
+                    <span class="ai-subtitle">Understanding the "Why" in Air Traffic</span>
+                </div>
+            </div>
+            <button id="ai-sidebar-close-btn">&times;</button>
+        </div>
+
+        <div class="ai-sidebar-body">
+            <div id="ai-chat-messages">
+                <div class="chat-msg ai-msg">
+                    <div class="msg-header">🤖 AI Co-Pilot</div>
+                    <div class="msg-content">
+                        Welcome! I analyze live ADS-B flight telemetry, atmospheric wind, and historical airspace data to explain <b>why</b> flights are performing maneuvers or answer questions about your airspace.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Prompt Pills -->
+            <div class="prompt-pills-container">
+                <span class="prompt-pills-label">Quick Questions:</span>
+                <div id="ai-prompt-pills">
+                    <button class="prompt-pill" data-prompt="Why is the selected plane climbing/descending?">✈️ Explain Selected Flight</button>
+                    <button class="prompt-pill" data-prompt="What was the lowest flight recorded this week?">📉 Lowest Flight</button>
+                    <button class="prompt-pill" data-prompt="Show me recent military or special aircraft">🎖️ Military Aircraft</button>
+                    <button class="prompt-pill" data-prompt="What is the average crosswind drift right now?">💨 Crosswind Drift</button>
+                    <button class="prompt-pill" data-prompt="List the 5 fastest planes in the area">🚀 Fastest Speed</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="ai-sidebar-footer">
+            <div id="ai-chat-input-container">
+                <input type="text" id="ai-chat-input" placeholder="Ask why a plane is turning, lowest flight, etc..." autocomplete="off">
+                <button id="ai-chat-send-btn">Ask AI</button>
             </div>
         </div>
     </div>

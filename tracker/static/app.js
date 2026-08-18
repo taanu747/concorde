@@ -472,6 +472,10 @@ const generatePopupHTML = (plane) => {
                 <span class="stat-label">Heading</span>
                 <span class="stat-value" style="color: ${headingTextColor}; font-weight:700;">${heading}&deg; <span style="font-size:0.75em; color: #cbd5e1;">(Light Arrow)</span></span>
             </div>
+
+            <button class="ai-explain-btn" onclick="explainAircraftIntent('${plane.hex}')">
+                🤖 Explain Flight Intent
+            </button>
         </div>
     `;
 };
@@ -1511,4 +1515,110 @@ document.addEventListener('click', () => {
     if (isMobileDevice && searchContainer && !searchContainer.classList.contains('mobile-hidden')) {
         searchContainer.classList.add('mobile-hidden');
     }
+});
+
+// --- AI Airspace Co-Pilot Sidebar Engine ---
+const aiSidebar = document.getElementById('ai-sidebar');
+const aiCopilotBtn = document.getElementById('ai-copilot-btn');
+const aiSidebarCloseBtn = document.getElementById('ai-sidebar-close-btn');
+const aiChatInput = document.getElementById('ai-chat-input');
+const aiChatSendBtn = document.getElementById('ai-chat-send-btn');
+const promptPills = document.querySelectorAll('.prompt-pill');
+
+if (aiCopilotBtn && aiSidebar) {
+    aiCopilotBtn.addEventListener('click', () => {
+        aiSidebar.classList.add('sidebar-open');
+    });
+}
+
+if (aiSidebarCloseBtn && aiSidebar) {
+    aiSidebarCloseBtn.addEventListener('click', () => {
+        aiSidebar.classList.remove('sidebar-open');
+    });
+}
+
+const sendAiQuery = async (queryText, aircraftObj = null) => {
+    const chatMsgs = document.getElementById('ai-chat-messages');
+    if (!chatMsgs) return;
+
+    // Append user message bubble
+    const userBubble = document.createElement('div');
+    userBubble.className = 'chat-msg user-msg';
+    userBubble.innerHTML = `<div class="msg-content">${queryText}</div>`;
+    chatMsgs.appendChild(userBubble);
+
+    // Append thinking AI bubble
+    const aiBubble = document.createElement('div');
+    aiBubble.className = 'chat-msg ai-msg';
+    aiBubble.innerHTML = `<div class="msg-header">🤖 AI Co-Pilot</div><div class="msg-content">Analyzing telemetry & database...</div>`;
+    chatMsgs.appendChild(aiBubble);
+    chatMsgs.scrollTop = chatMsgs.scrollHeight;
+
+    try {
+        const res = await fetch('/api/ai/query', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                query: queryText,
+                aircraft: aircraftObj || (selectedHex ? aircraftData[selectedHex] : null)
+            })
+        });
+
+        const data = await res.json();
+
+        if (data.type === 'data_table' && data.table) {
+            let tableHtml = `<div style="margin-bottom:6px;">${data.text}</div><table class="ai-table"><thead><tr><th>Callsign/Hex</th><th>Alt</th><th>Spd</th><th>Model/Operator</th></tr></thead><tbody>`;
+            data.table.forEach(r => {
+                const cs = r.callsign ? r.callsign.trim() : r.hex;
+                const alt = r.altitude ? `${r.altitude.toLocaleString()} ft` : '--';
+                const spd = r.speed ? `${Math.round(r.speed)} kts` : '--';
+                const info = r.model || r.operator || 'N/A';
+                tableHtml += `<tr style="cursor:pointer;" onclick="if(aircraftMarkers['${r.hex}']){map.flyTo(aircraftMarkers['${r.hex}'].getLatLng(), 11); aircraftMarkers['${r.hex}'].openPopup();}"><td><b>${cs}</b></td><td>${alt}</td><td>${spd}</td><td>${info}</td></tr>`;
+            });
+            tableHtml += `</tbody></table>`;
+            aiBubble.querySelector('.msg-content').innerHTML = tableHtml;
+        } else {
+            aiBubble.querySelector('.msg-content').innerHTML = data.text || 'Unable to analyze query.';
+        }
+    } catch (err) {
+        aiBubble.querySelector('.msg-content').innerHTML = 'Error connecting to AI Co-Pilot engine.';
+    }
+
+    chatMsgs.scrollTop = chatMsgs.scrollHeight;
+};
+
+// Global function to trigger intent explanation from popup
+window.explainAircraftIntent = (hex) => {
+    const plane = aircraftData[hex];
+    if (aiSidebar) {
+        aiSidebar.classList.add('sidebar-open');
+    }
+    const queryText = plane ? `Why is aircraft ${plane.flight ? plane.flight.trim() : hex} climbing/descending?` : 'Explain intent for selected aircraft';
+    sendAiQuery(queryText, plane);
+};
+
+if (aiChatSendBtn && aiChatInput) {
+    const handleSend = () => {
+        const text = aiChatInput.value.trim();
+        if (text) {
+            sendAiQuery(text);
+            aiChatInput.value = '';
+        }
+    };
+
+    aiChatSendBtn.addEventListener('click', handleSend);
+    aiChatInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            handleSend();
+        }
+    });
+}
+
+promptPills.forEach(pill => {
+    pill.addEventListener('click', () => {
+        const promptText = pill.getAttribute('data-prompt');
+        if (promptText) {
+            sendAiQuery(promptText);
+        }
+    });
 });
