@@ -1598,11 +1598,18 @@ const sendAiQuery = async (queryText, aircraftObj = null) => {
 
 // Global function to trigger intent explanation from popup
 window.explainAircraftIntent = (hex) => {
-    const plane = (hex ? aircraftData[hex] : null) || (selectedHex ? aircraftData[selectedHex] : null);
+    const targetHex = hex || selectedHex || '';
+    let plane = null;
+    if (targetHex && aircraftMarkers[targetHex]) {
+        plane = aircraftMarkers[targetHex].planeData;
+    } else if (targetHex && aircraftData[targetHex]) {
+        plane = aircraftData[targetHex];
+    }
+    
     if (aiSidebar) {
         aiSidebar.classList.add('sidebar-open');
     }
-    const targetHex = hex || selectedHex || '';
+    
     const queryText = plane ? `Why is flight ${plane.flight ? plane.flight.trim() : targetHex} doing that?` : `Explain flight intent for aircraft ${targetHex}`;
     sendAiQuery(queryText, plane);
 };
@@ -1611,8 +1618,10 @@ window.explainAircraftIntent = (hex) => {
 document.addEventListener('click', (e) => {
     const btn = e.target.closest('.ai-explain-btn');
     if (btn) {
-        const hex = btn.getAttribute('onclick')?.match(/'([^']+)'/)?.[1] || selectedHex;
-        if (hex && window.explainAircraftIntent) {
+        e.preventDefault();
+        e.stopPropagation();
+        const hex = btn.getAttribute('data-hex') || btn.getAttribute('onclick')?.match(/'([^']+)'/)?.[1] || selectedHex;
+        if (window.explainAircraftIntent) {
             window.explainAircraftIntent(hex);
         }
     }

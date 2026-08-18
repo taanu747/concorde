@@ -6,6 +6,7 @@ import urllib.request
 import shutil
 import sqlite3
 import threading
+import re
 from flask import Flask, jsonify, render_template, request
 
 # Database Configuration
@@ -661,29 +662,51 @@ def ai_copilot_query():
             candidates = [t for t in tokens if t not in stop_words and not t.isdigit() and len(t) >= 3]
             
             if candidates and not aircraft_state:
-                cand = candidates[0]
-                q_find = '''
-                    SELECT hex, callsign, altitude, speed, track, heading, operator, model, is_military, timestamp
-                    FROM aircraft_history
-                    WHERE UPPER(callsign) = ? OR UPPER(hex) = ?
-                    ORDER BY timestamp DESC
-                    LIMIT 1
-                '''
-                if DB_TYPE == "postgres": q_find = q_find.replace("?", "%s")
-                res = execute_query(conn, q_find, (cand, cand))
-                if res:
-                    r = res[0]
-                    aircraft_state = {
-                        "flight": r['callsign'] or r['hex'],
-                        "hex": r['hex'],
-                        "alt_baro": r['altitude'],
-                        "gs": r['speed'],
-                        "track": r['track'],
-                        "mag_heading": r['heading'],
-                        "operator": r['operator'],
-                        "model": r['model']
-                    }
-                    extracted_callsign = cand
+                cand = candidates[0].strip()
+                # 1. Search live in-memory aircraft first
+                with lock:
+                    aircraft_dict = latest_payload.get('aircraft', {})
+                    if isinstance(aircraft_dict, dict):
+                        for hex_k, p in aircraft_dict.items():
+                            cs = (p.get('flight') or p.get('callsign') or '').strip().upper()
+                            hx = (p.get('hex') or '').strip().upper()
+                            if cand in cs or cand in hx:
+                                aircraft_state = p
+                                extracted_callsign = cand
+                                break
+                    elif isinstance(aircraft_dict, list):
+                        for p in aircraft_dict:
+                            cs = (p.get('flight') or p.get('callsign') or '').strip().upper()
+                            hx = (p.get('hex') or '').strip().upper()
+                            if cand in cs or cand in hx:
+                                aircraft_state = p
+                                extracted_callsign = cand
+                                break
+
+                # 2. Search database history if not in active live feed
+                if not aircraft_state:
+                    q_find = '''
+                        SELECT hex, callsign, altitude, speed, track, heading, operator, model, is_military, timestamp
+                        FROM aircraft_history
+                        WHERE UPPER(callsign) LIKE ? OR UPPER(hex) LIKE ?
+                        ORDER BY timestamp DESC
+                        LIMIT 1
+                    '''
+                    if DB_TYPE == "postgres": q_find = q_find.replace("?", "%s")
+                    res = execute_query(conn, q_find, (f"%{cand}%", f"%{cand}%"))
+                    if res:
+                        r = res[0]
+                        aircraft_state = {
+                            "flight": r['callsign'] or r['hex'],
+                            "hex": r['hex'],
+                            "alt_baro": r['altitude'],
+                            "gs": r['speed'],
+                            "track": r['track'],
+                            "mag_heading": r['heading'],
+                            "operator": r['operator'],
+                            "model": r['model']
+                        }
+                        extracted_callsign = cand
 
             # -------------------------------------------------------------
             # STEP 2: Aircraft Intent Explanation ("Why is my flight doing that?")
