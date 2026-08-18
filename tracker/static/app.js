@@ -1577,6 +1577,15 @@ const sendAiQuery = async (queryText, aircraftObj = null) => {
             });
             tableHtml += `</tbody></table>`;
             aiBubble.querySelector('.msg-content').innerHTML = tableHtml;
+        } else if (data.type === 'rank_table' && data.table) {
+            let tableHtml = `<div style="margin-bottom:6px;">${data.text}</div><table class="ai-table"><thead><tr><th>Name</th><th>Count</th></tr></thead><tbody>`;
+            data.table.forEach(r => {
+                const name = r.name || 'Unknown';
+                const count = r.flight_count || r.count || 0;
+                tableHtml += `<tr><td><b>${name}</b></td><td><span style="color:#38bdf8; font-weight:700;">${count}</span></td></tr>`;
+            });
+            tableHtml += `</tbody></table>`;
+            aiBubble.querySelector('.msg-content').innerHTML = tableHtml;
         } else {
             aiBubble.querySelector('.msg-content').innerHTML = data.text || 'Unable to analyze query.';
         }
@@ -1589,13 +1598,25 @@ const sendAiQuery = async (queryText, aircraftObj = null) => {
 
 // Global function to trigger intent explanation from popup
 window.explainAircraftIntent = (hex) => {
-    const plane = aircraftData[hex];
+    const plane = (hex ? aircraftData[hex] : null) || (selectedHex ? aircraftData[selectedHex] : null);
     if (aiSidebar) {
         aiSidebar.classList.add('sidebar-open');
     }
-    const queryText = plane ? `Why is aircraft ${plane.flight ? plane.flight.trim() : hex} climbing/descending?` : 'Explain intent for selected aircraft';
+    const targetHex = hex || selectedHex || '';
+    const queryText = plane ? `Why is flight ${plane.flight ? plane.flight.trim() : targetHex} doing that?` : `Explain flight intent for aircraft ${targetHex}`;
     sendAiQuery(queryText, plane);
 };
+
+// Event delegation for popup AI button clicks
+document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.ai-explain-btn');
+    if (btn) {
+        const hex = btn.getAttribute('onclick')?.match(/'([^']+)'/)?.[1] || selectedHex;
+        if (hex && window.explainAircraftIntent) {
+            window.explainAircraftIntent(hex);
+        }
+    }
+});
 
 if (aiChatSendBtn && aiChatInput) {
     const handleSend = () => {
