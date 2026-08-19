@@ -710,13 +710,13 @@ def safe_round(val, decimals=0):
 @app.route('/api/ai/query', methods=['POST'])
 def ai_copilot_query():
     """AI Co-Pilot endpoint for natural language flight intent & database queries."""
-    data = request.json or {}
-    user_query = data.get('query', '').strip()
-    aircraft_state = data.get('aircraft', {})
-    
-    query_lower = user_query.lower()
-    
+    user_query = ""
     try:
+        data = request.get_json(silent=True) or {}
+        user_query = str(data.get('query', '')).strip()
+        aircraft_state = data.get('aircraft', {}) or {}
+        query_lower = user_query.lower()
+        
         with get_db_connection() as conn:
             # -------------------------------------------------------------
             # STEP 1: Callsign / Hex Extraction from User Prompt
@@ -732,7 +732,7 @@ def ai_copilot_query():
                 'RADAR', 'WIND', 'DRIFT', 'MOST', 'COMMON', 'MODEL', 'AIRLINE', 'FLIGHT', 'PLANE', 
                 'PLANES', 'THIS', 'THAT', 'PART', 'DOING', 'LOWEST', 'FASTEST', 'RECORDED', 'WEEK', 
                 'TODAY', 'AREA', 'SELECTED', 'JETWAY', 'AIRWAY', 'CLIMBING', 'DESCENDING', 'SPEED',
-                'MILITARY', 'SPECIAL', 'RECENT', 'AIRCRAFT'
+                'MILITARY', 'SPECIAL', 'RECENT', 'AIRCRAFT', 'HIGH'
             }
             # Aviation callsigns almost always contain digits (e.g. DAL123) or are 6-character hexes (0-9, A-F only)
             candidates = [t for t in tokens if t not in stop_words and (any(c.isdigit() for c in t) or bool(re.match(r'^[A-F0-9]{6}$', t)))]
@@ -783,6 +783,13 @@ def ai_copilot_query():
             # STEP 2: Aircraft Intent Explanation ("Why is my flight doing that?")
             # -------------------------------------------------------------
             if aircraft_state or extracted_callsign:
+                if not aircraft_state and extracted_callsign:
+                    return jsonify({
+                        "type": "explanation",
+                        "text": f"<b>🤖 AI Co-Pilot Flight Search:</b><br><br>"
+                                f"Flight <b>{extracted_callsign}</b> is not currently active in your local feeder's live view or recorded in your 7-day database history.<br><br>"
+                                f"• <b>Airspace Coverage Note:</b> Your feeder tracks aircraft within ~150–250 miles. Aircraft operating in distant states or overseas will only appear in your database when they enter your regional airspace."
+                    })
                 callsign = aircraft_state.get('flight') or aircraft_state.get('callsign') or aircraft_state.get('hex', 'Selected Aircraft')
                 hex_code = str(aircraft_state.get('hex', 'N/A')).upper()
                 alt_raw = aircraft_state.get('alt_baro') if aircraft_state.get('alt_baro') is not None else (aircraft_state.get('altitude') or 0)

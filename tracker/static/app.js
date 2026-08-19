@@ -1604,7 +1604,8 @@ const sendAiQuery = async (queryText, aircraftObj = null) => {
             aiBubble.querySelector('.msg-content').innerHTML = data.text || 'Unable to analyze query.';
         }
     } catch (err) {
-        aiBubble.querySelector('.msg-content').innerHTML = 'Error connecting to AI Co-Pilot engine.';
+        console.error("AI Query error:", err);
+        aiBubble.querySelector('.msg-content').innerHTML = '<b>🤖 AI Co-Pilot:</b> Connection temporarily delayed while querying airspace database. Please try asking your question again in a moment.';
     }
 
     chatMsgs.scrollTop = chatMsgs.scrollHeight;
