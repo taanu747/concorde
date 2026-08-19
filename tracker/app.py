@@ -539,94 +539,131 @@ def get_analytics_dashboard():
     try:
         with get_db_connection() as conn:
             # 1. Lowest aircraft flown this week
-            q_lowest = '''
-                SELECT hex, callsign, altitude, speed, model, operator, timestamp
-                FROM aircraft_history
-                WHERE altitude IS NOT NULL AND altitude > 0
-                ORDER BY altitude ASC
-                LIMIT 1
-            '''
-            res_lowest = execute_query(conn, q_lowest)
-            lowest = res_lowest[0] if res_lowest else None
+            lowest = None
+            try:
+                q_lowest = '''
+                    SELECT hex, callsign, altitude, speed, model, operator, timestamp
+                    FROM aircraft_history
+                    WHERE altitude IS NOT NULL AND altitude > 0
+                    ORDER BY altitude ASC
+                    LIMIT 1
+                '''
+                res_lowest = execute_query(conn, q_lowest)
+                if res_lowest: lowest = res_lowest[0]
+            except Exception as e:
+                print(f"Analytics lowest query error: {e}")
 
             # 2. Fastest aircraft flown this week
-            q_fastest = '''
-                SELECT hex, callsign, altitude, speed, model, operator, timestamp
-                FROM aircraft_history
-                WHERE speed IS NOT NULL AND speed > 0
-                ORDER BY speed DESC
-                LIMIT 1
-            '''
-            res_fastest = execute_query(conn, q_fastest)
-            fastest = res_fastest[0] if res_fastest else None
+            fastest = None
+            try:
+                q_fastest = '''
+                    SELECT hex, callsign, altitude, speed, model, operator, timestamp
+                    FROM aircraft_history
+                    WHERE speed IS NOT NULL AND speed > 0
+                    ORDER BY speed DESC
+                    LIMIT 1
+                '''
+                res_fastest = execute_query(conn, q_fastest)
+                if res_fastest: fastest = res_fastest[0]
+            except Exception as e:
+                print(f"Analytics fastest query error: {e}")
 
             # 3. Busiest hour of the day (UTC)
-            if DB_TYPE == "postgres":
-                q_busiest = '''
-                    SELECT EXTRACT(HOUR FROM timestamp)::text as hour_utc, COUNT(DISTINCT hex) as flight_count
-                    FROM aircraft_history
-                    GROUP BY hour_utc
-                    ORDER BY flight_count DESC
-                    LIMIT 1
-                '''
-            else:
-                q_busiest = '''
-                    SELECT strftime('%H', timestamp) as hour_utc, COUNT(DISTINCT hex) as flight_count
-                    FROM aircraft_history
-                    GROUP BY hour_utc
-                    ORDER BY flight_count DESC
-                    LIMIT 1
-                '''
-            res_busiest = execute_query(conn, q_busiest)
-            busiest = res_busiest[0] if res_busiest else {"hour_utc": "14", "flight_count": 0}
+            busiest = {"hour_utc": "14", "flight_count": 0}
+            try:
+                if DB_TYPE == "postgres":
+                    q_busiest = '''
+                        SELECT EXTRACT(HOUR FROM timestamp)::text as hour_utc, COUNT(DISTINCT hex) as flight_count
+                        FROM aircraft_history
+                        GROUP BY EXTRACT(HOUR FROM timestamp)
+                        ORDER BY flight_count DESC
+                        LIMIT 1
+                    '''
+                else:
+                    q_busiest = '''
+                        SELECT strftime('%H', timestamp) as hour_utc, COUNT(DISTINCT hex) as flight_count
+                        FROM aircraft_history
+                        GROUP BY hour_utc
+                        ORDER BY flight_count DESC
+                        LIMIT 1
+                    '''
+                res_busiest = execute_query(conn, q_busiest)
+                if res_busiest: busiest = res_busiest[0]
+            except Exception as e:
+                print(f"Analytics busiest query error: {e}")
 
             # 4. Average Crosswind Drift (past 1 hour) & Average Altitude
-            cutoff_1h = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time() - 3600))
-            q_drift = "SELECT AVG(track_diff) as avg_drift FROM aircraft_history WHERE timestamp >= ?"
-            if DB_TYPE == "postgres": q_drift = q_drift.replace("?", "%s")
-            res_drift = execute_query(conn, q_drift, (cutoff_1h,))
-            avg_drift = round(float(res_drift[0]['avg_drift']), 1) if res_drift and res_drift[0]['avg_drift'] is not None else 0.0
+            avg_drift = 0.0
+            try:
+                if DB_TYPE == "postgres":
+                    q_drift = "SELECT AVG(track_diff) as avg_drift FROM aircraft_history WHERE timestamp >= NOW() - INTERVAL '1 hour'"
+                    res_drift = execute_query(conn, q_drift)
+                else:
+                    cutoff_1h = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time() - 3600))
+                    q_drift = "SELECT AVG(track_diff) as avg_drift FROM aircraft_history WHERE timestamp >= ?"
+                    res_drift = execute_query(conn, q_drift, (cutoff_1h,))
+                if res_drift and res_drift[0]['avg_drift'] is not None:
+                    avg_drift = round(float(res_drift[0]['avg_drift']), 1)
+            except Exception as e:
+                print(f"Analytics drift query error: {e}")
 
-            q_avg = "SELECT AVG(altitude) as avg_alt FROM aircraft_history WHERE altitude IS NOT NULL AND altitude > 0"
-            res_avg = execute_query(conn, q_avg)
-            avg_alt = round(float(res_avg[0]['avg_alt'])) if res_avg and res_avg[0]['avg_alt'] is not None else 0
+            avg_alt = 0
+            try:
+                q_avg = "SELECT AVG(altitude) as avg_alt FROM aircraft_history WHERE altitude IS NOT NULL AND altitude > 0"
+                res_avg = execute_query(conn, q_avg)
+                if res_avg and res_avg[0]['avg_alt'] is not None:
+                    avg_alt = round(float(res_avg[0]['avg_alt']))
+            except Exception as e:
+                print(f"Analytics avg_alt query error: {e}")
 
             # 5. Top 5 Operators / Airlines
-            q_top_airlines = '''
-                SELECT COALESCE(NULLIF(operator, ''), 'General Aviation / Private') as name, COUNT(DISTINCT hex) as flight_count
-                FROM aircraft_history
-                WHERE operator IS NOT NULL AND operator != ''
-                GROUP BY name
-                ORDER BY flight_count DESC
-                LIMIT 5
-            '''
-            top_airlines = execute_query(conn, q_top_airlines) or []
+            top_airlines = []
+            try:
+                q_top_airlines = '''
+                    SELECT COALESCE(NULLIF(operator, ''), 'General Aviation / Private') as name, COUNT(DISTINCT hex) as flight_count
+                    FROM aircraft_history
+                    WHERE operator IS NOT NULL AND operator != ''
+                    GROUP BY 1
+                    ORDER BY flight_count DESC
+                    LIMIT 5
+                '''
+                top_airlines = execute_query(conn, q_top_airlines) or []
+            except Exception as e:
+                print(f"Analytics top_airlines query error: {e}")
 
             # 6. Top 5 Aircraft Models
-            q_top_models = '''
-                SELECT COALESCE(NULLIF(model, ''), 'Light Aircraft') as name, COUNT(DISTINCT hex) as flight_count
-                FROM aircraft_history
-                WHERE model IS NOT NULL AND model != ''
-                GROUP BY name
-                ORDER BY flight_count DESC
-                LIMIT 5
-            '''
-            top_models = execute_query(conn, q_top_models) or []
+            top_models = []
+            try:
+                q_top_models = '''
+                    SELECT COALESCE(NULLIF(model, ''), 'Light Aircraft') as name, COUNT(DISTINCT hex) as flight_count
+                    FROM aircraft_history
+                    WHERE model IS NOT NULL AND model != ''
+                    GROUP BY 1
+                    ORDER BY flight_count DESC
+                    LIMIT 5
+                '''
+                top_models = execute_query(conn, q_top_models) or []
+            except Exception as e:
+                print(f"Analytics top_models query error: {e}")
 
             # 7. Recent Military / Rare Aircraft (Unique per aircraft hex)
-            q_military = '''
-                SELECT h.hex, h.callsign, h.altitude, h.speed, h.model, h.operator, h.timestamp
-                FROM aircraft_history h
-                INNER JOIN (
-                    SELECT hex, MAX(timestamp) as max_ts
-                    FROM aircraft_history
-                    WHERE is_military = 1 AND (callsign IS NULL OR (callsign NOT LIKE 'AFR%' AND callsign NOT LIKE 'AFL%' AND callsign NOT LIKE 'AFE%'))
-                    GROUP BY hex
-                ) latest ON h.hex = latest.hex AND h.timestamp = latest.max_ts
-                ORDER BY h.timestamp DESC
-                LIMIT 5
-            '''
-            military_flights = execute_query(conn, q_military) or []
+            military_flights = []
+            try:
+                q_military = '''
+                    SELECT h.hex, h.callsign, h.altitude, h.speed, h.model, h.operator, h.timestamp
+                    FROM aircraft_history h
+                    INNER JOIN (
+                        SELECT hex, MAX(timestamp) as max_ts
+                        FROM aircraft_history
+                        WHERE is_military = 1 AND (callsign IS NULL OR (callsign NOT LIKE 'AFR%' AND callsign NOT LIKE 'AFL%' AND callsign NOT LIKE 'AFE%'))
+                        GROUP BY hex
+                    ) latest ON h.hex = latest.hex AND h.timestamp = latest.max_ts
+                    ORDER BY h.timestamp DESC
+                    LIMIT 5
+                '''
+                military_flights = execute_query(conn, q_military) or []
+            except Exception as e:
+                print(f"Analytics military query error: {e}")
 
             return jsonify({
                 "lowest": lowest,
