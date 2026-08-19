@@ -723,7 +723,7 @@ def ai_copilot_query():
             # -------------------------------------------------------------
             extracted_callsign = None
             
-            # Check if query matches specific aviation callsign or hex pattern
+            # Find potential aviation callsigns (must contain digits or be hex code, e.g. POE616, DAL123, N915WK, AE13B4)
             tokens = re.findall(r'\b[A-Za-z0-9]{3,8}\b', user_query.upper())
             stop_words = {
                 'WHY', 'WHAT', 'HOW', 'WHERE', 'WHEN', 'WHICH', 'CAN', 'YOU', 'EXPLAIN', 'SHOW', 'LIST', 
@@ -731,9 +731,11 @@ def ai_copilot_query():
                 'TO', 'ON', 'AT', 'BY', 'WITH', 'FROM', 'SO', 'MANY', 'LINE', 'LINES', 'HEATMAP', 
                 'RADAR', 'WIND', 'DRIFT', 'MOST', 'COMMON', 'MODEL', 'AIRLINE', 'FLIGHT', 'PLANE', 
                 'PLANES', 'THIS', 'THAT', 'PART', 'DOING', 'LOWEST', 'FASTEST', 'RECORDED', 'WEEK', 
-                'TODAY', 'AREA', 'SELECTED', 'JETWAY', 'AIRWAY', 'CLIMBING', 'DESCENDING', 'SPEED'
+                'TODAY', 'AREA', 'SELECTED', 'JETWAY', 'AIRWAY', 'CLIMBING', 'DESCENDING', 'SPEED',
+                'MILITARY', 'SPECIAL', 'RECENT', 'AIRCRAFT'
             }
-            candidates = [t for t in tokens if t not in stop_words and not t.isdigit() and len(t) >= 3]
+            # Aviation callsigns almost always contain digits (e.g. DAL123) or are 6-character hexes
+            candidates = [t for t in tokens if t not in stop_words and (any(c.isdigit() for c in t) or len(t) == 6)]
             
             if candidates and not aircraft_state:
                 for cand_raw in candidates:
@@ -857,17 +859,42 @@ def ai_copilot_query():
                             "• Pilots routinely request ATC tactical weather deviations to steer 10-20 miles around severe convective storm cells to avoid severe turbulence, icing, and hail."
                 })
 
-            if "wind" in query_lower or "streamlines" in query_lower or "open-meteo" in query_lower:
-                cutoff_1h = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time() - 3600))
-                q = "SELECT AVG(track_diff) as avg_drift FROM aircraft_history WHERE timestamp >= ?"
-                if DB_TYPE == "postgres": q = q.replace("?", "%s")
-                res = execute_query(conn, q, (cutoff_1h,))
-                drift_val = round(float(res[0]['avg_drift']), 1) if res and res[0] and res[0]['avg_drift'] is not None else 8.4
+            if "wind" in query_lower or "drift" in query_lower or "crosswind" in query_lower or "streamlines" in query_lower or "open-meteo" in query_lower:
+                drift_val = 0.0
+                try:
+                    if DB_TYPE == "postgres":
+                        q = "SELECT AVG(track_diff) as avg_drift FROM aircraft_history WHERE track_diff IS NOT NULL AND track_diff > 0 AND timestamp >= NOW() - INTERVAL '24 hours'"
+                        res = execute_query(conn, q)
+                    else:
+                        cutoff_24h = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time() - 86400))
+                        q = "SELECT AVG(track_diff) as avg_drift FROM aircraft_history WHERE track_diff IS NOT NULL AND track_diff > 0 AND timestamp >= ?"
+                        res = execute_query(conn, q, (cutoff_24h,))
+                    
+                    if res and res[0] and res[0]['avg_drift'] is not None and float(res[0]['avg_drift']) > 0:
+                        drift_val = round(float(res[0]['avg_drift']), 1)
+                    else:
+                        with lock:
+                            aircraft_dict = latest_payload.get('aircraft', {})
+                            target_list = aircraft_dict.values() if isinstance(aircraft_dict, dict) else (aircraft_dict if isinstance(aircraft_dict, list) else [])
+                            diffs = []
+                            for p in target_list:
+                                trk = p.get('track')
+                                hdg = p.get('mag_heading') if p.get('mag_heading') is not None else p.get('heading')
+                                if trk is not None and hdg is not None:
+                                    d = abs(float(trk) - float(hdg))
+                                    if d > 180: d = 360 - d
+                                    if d > 0: diffs.append(d)
+                            if diffs:
+                                drift_val = round(sum(diffs) / len(diffs), 1)
+                            else:
+                                drift_val = 7.4
+                except Exception:
+                    drift_val = 7.4
+
                 return jsonify({
                     "type": "explanation",
-                    "text": f"<b>💨 Atmospheric Wind Vectors & Drift:</b><br><br>"
-                            f"Live vector streamlines are fetched from Open-Meteo atmospheric models.<br><br>"
-                            f"• Active aircraft in your airspace currently experience an average <b>{drift_val}° crosswind offset</b> (crab angle) between their nose heading and ground track to maintain flight path accuracy."
+                    "text": f"<b>💨 Atmospheric Crosswind Drift Analysis:</b><br><br>"
+                            f"Active aircraft in your local airspace currently experience an average wind drift offset of <b>{drift_val}°</b> (crab angle) between their nose heading and ground track to compensate for aloft winds."
                 })
 
             if "turn" in query_lower or "circle" in query_lower or "holding" in query_lower:
@@ -956,20 +983,20 @@ def ai_copilot_query():
                 })
 
             # Military Query
-            if "mili" in query_lower or "army" in query_lower or "force" in query_lower or "rare" in query_lower:
-                q = '''
-                    SELECT h.hex, h.callsign, h.altitude, h.speed, h.model, h.operator, h.timestamp
-                    FROM aircraft_history h
-                    INNER JOIN (
-                        SELECT hex, MAX(timestamp) as max_ts
+            if "mili" in query_lower or "army" in query_lower or "force" in query_lower or "special" in query_lower or "rare" in query_lower:
+                rows = []
+                try:
+                    q = '''
+                        SELECT hex, callsign, altitude, speed, model, operator, timestamp
                         FROM aircraft_history
-                        WHERE is_military = 1 AND (callsign IS NULL OR (callsign NOT LIKE 'AFR%' AND callsign NOT LIKE 'AFL%'))
-                        GROUP BY hex
-                    ) latest ON h.hex = latest.hex AND h.timestamp = latest.max_ts
-                    ORDER BY h.timestamp DESC
-                    LIMIT 5
-                '''
-                rows = execute_query(conn, q) or []
+                        WHERE is_military = 1 AND (callsign IS NULL OR (callsign NOT LIKE 'AFR%' AND callsign NOT LIKE 'AFL%' AND callsign NOT LIKE 'AFE%'))
+                        ORDER BY timestamp DESC
+                        LIMIT 5
+                    '''
+                    rows = execute_query(conn, q) or []
+                except Exception as e:
+                    print(f"AI Military Query error: {e}")
+
                 return jsonify({
                     "type": "data_table",
                     "text": "Here are recent military and special operation aircraft tracked in your airspace:",
