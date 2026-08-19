@@ -801,6 +801,10 @@ if (searchBar && searchResults) {
             return;
         }
 
+        // Show immediate loading notice
+        searchResults.innerHTML = '<div class="search-result-item" style="pointer-events:none;"><div class="search-result-callsign" style="color:#38bdf8; font-weight:700;">⏳ Searching Airspace Database...</div><div class="search-result-details" style="color:#cbd5e1; margin-top:2px;">(Fetching records, this may take a few seconds)</div></div>';
+        searchResults.style.display = 'block';
+
         searchTimeout = setTimeout(async () => {
             try {
                 const res = await fetch(`/api/search?query=${query}`);
@@ -1332,9 +1336,19 @@ const analyticsBtn = document.getElementById('analytics-btn');
 const analyticsCloseBtn = document.getElementById('analytics-close-btn');
 
 const loadAnalyticsDashboard = async () => {
+    const subtitleEl = document.getElementById('analytics-subtitle');
+    if (subtitleEl) {
+        subtitleEl.textContent = '⏳ Querying database analytics (this may take a few seconds)...';
+        subtitleEl.style.color = '#38bdf8';
+    }
     try {
         const res = await fetch('/api/analytics/dashboard');
         const data = await res.json();
+
+        if (subtitleEl) {
+            subtitleEl.textContent = '⚡ Live Airspace Telemetry & Historical Aggregations';
+            subtitleEl.style.color = '#94a3b8';
+        }
 
         // 1. Lowest Aircraft
         const lowestAltEl = document.getElementById('kpi-lowest-alt');
@@ -1550,7 +1564,7 @@ const sendAiQuery = async (queryText, aircraftObj = null) => {
     // Append thinking AI bubble
     const aiBubble = document.createElement('div');
     aiBubble.className = 'chat-msg ai-msg';
-    aiBubble.innerHTML = `<div class="msg-header">🤖 AI Co-Pilot</div><div class="msg-content">Analyzing telemetry & database...</div>`;
+    aiBubble.innerHTML = `<div class="msg-header">🤖 AI Co-Pilot</div><div class="msg-content">⏳ Analyzing live telemetry & database (this may take a few seconds)...</div>`;
     chatMsgs.appendChild(aiBubble);
     chatMsgs.scrollTop = chatMsgs.scrollHeight;
 
