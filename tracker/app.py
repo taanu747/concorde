@@ -734,8 +734,8 @@ def ai_copilot_query():
                 'TODAY', 'AREA', 'SELECTED', 'JETWAY', 'AIRWAY', 'CLIMBING', 'DESCENDING', 'SPEED',
                 'MILITARY', 'SPECIAL', 'RECENT', 'AIRCRAFT'
             }
-            # Aviation callsigns almost always contain digits (e.g. DAL123) or are 6-character hexes
-            candidates = [t for t in tokens if t not in stop_words and (any(c.isdigit() for c in t) or len(t) == 6)]
+            # Aviation callsigns almost always contain digits (e.g. DAL123) or are 6-character hexes (0-9, A-F only)
+            candidates = [t for t in tokens if t not in stop_words and (any(c.isdigit() for c in t) or bool(re.match(r'^[A-F0-9]{6}$', t)))]
             
             if candidates and not aircraft_state:
                 for cand_raw in candidates:
@@ -834,6 +834,51 @@ def ai_copilot_query():
             # -------------------------------------------------------------
             # STEP 3: Aviation & Airspace Feature Knowledge Q&A
             # -------------------------------------------------------------
+            
+            # Altitude Differences ("why are some planes cruising lower than others")
+            if "lower" in query_lower or "higher" in query_lower or "cruising lower" in query_lower or "different alt" in query_lower:
+                return jsonify({
+                    "type": "explanation",
+                    "text": "<b>✈️ Why Aircraft Cruise at Different Altitudes:</b><br><br>"
+                            "Aircraft cruise at different altitudes based on 4 primary aviation rules:<br><br>"
+                            "1. <b>Aircraft Type & Performance:</b> Turboprops and light aircraft fly lower (15,000–25,000 ft), while jetliners cruise higher (30,000–41,000 ft) where thin air maximizes fuel efficiency.<br>"
+                            "2. <b>Flight Distance:</b> Short regional hops (100–200 miles) don't climb to 35,000 ft because climbing takes too much time and fuel.<br>"
+                            "3. <b>Direction of Flight (Semi-Circular Rule):</b> Eastbound flights cruise at ODD thousand altitudes (e.g., 33,000 ft), while Westbound flights cruise at EVEN thousand altitudes (e.g., 34,000 ft) to prevent mid-air collisions.<br>"
+                            "4. <b>Jetstreams & Turbulence:</b> Pilots request altitude changes to catch 100+ knot tailwinds or avoid bumpy turbulence layers."
+                })
+
+            # Curved / Squiggly Flight Paths
+            if "curve" in query_lower or "curved" in query_lower or "straight" in query_lower or "route" in query_lower:
+                return jsonify({
+                    "type": "explanation",
+                    "text": "<b>🌐 Curved Flight Paths & Great Circle Routes:</b><br><br>"
+                            "Flight paths look curved on flat maps for three reasons:<br><br>"
+                            "1. <b>Great Circle Routes:</b> The Earth is a sphere! A curved line on a flat 2D map is actually the shortest 3D distance over the globe.<br>"
+                            "2. <b>Airway Highways:</b> Aircraft follow assigned navigation waypoints (Jetways) rather than flying in a straight line.<br>"
+                            "3. <b>ATC Vectoring:</b> Air Traffic Control steers planes around severe weather storms or restricted military airspace."
+                })
+
+            # 250-Knot Speed Limit
+            if "10,000" in query_lower or "10000" in query_lower or "speed limit" in query_lower:
+                return jsonify({
+                    "type": "explanation",
+                    "text": "<b>⏱️ The 250-Knot Speed Limit Rule (< 10,000 ft):</b><br><br>"
+                            "FAA and ICAO regulations mandate a maximum speed limit of <b>250 knots (287 mph)</b> below 10,000 ft MSL.<br><br>"
+                            "• This ensures pilots have sufficient reaction time to see and avoid visual general aviation traffic in congested terminal airport airspace."
+                })
+
+            # Squawk Codes
+            if "squawk" in query_lower or "transponder" in query_lower:
+                return jsonify({
+                    "type": "explanation",
+                    "text": "<b>📡 Transponder Squawk Codes:</b><br><br>"
+                            "Squawk codes are 4-digit octal numbers assigned by ATC to identify aircraft on radar:<br><br>"
+                            "• <b>1200:</b> VFR (Visual Flight Rules) private flights.<br>"
+                            "• <b>7500:</b> Unlawful Interference / Hijack Emergency.<br>"
+                            "• <b>7600:</b> Radio Communications Failure.<br>"
+                            "• <b>7700:</b> General In-Flight Emergency."
+                })
+
             if "jetway" in query_lower or "airway" in query_lower:
                 return jsonify({
                     "type": "explanation",
