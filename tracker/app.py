@@ -904,7 +904,7 @@ def ai_copilot_query():
                             "• Pilots routinely request ATC tactical weather deviations to steer 10-20 miles around severe convective storm cells to avoid severe turbulence, icing, and hail."
                 })
 
-            if "wind" in query_lower or "drift" in query_lower or "crosswind" in query_lower or "streamlines" in query_lower or "open-meteo" in query_lower:
+            if "weather" in query_lower or "wind" in query_lower or "drift" in query_lower or "affect" in query_lower or "affecting" in query_lower or "crosswind" in query_lower or "streamlines" in query_lower or "open-meteo" in query_lower or "storm" in query_lower:
                 drift_val = 0.0
                 try:
                     if DB_TYPE == "postgres":
@@ -938,8 +938,12 @@ def ai_copilot_query():
 
                 return jsonify({
                     "type": "explanation",
-                    "text": f"<b>💨 Atmospheric Crosswind Drift Analysis:</b><br><br>"
-                            f"Active aircraft in your local airspace currently experience an average wind drift offset of <b>{drift_val}°</b> (crab angle) between their nose heading and ground track to compensate for aloft winds."
+                    "text": "<b>🌧️ How Weather & Wind Affect Flight Paths:</b><br><br>"
+                            "Weather and aloft atmospheric winds dynamically shape flight paths in 4 key ways:<br><br>"
+                            f"1. <b>Crosswind Crab Angle ({drift_val}° Avg Offset Right Now):</b> Aircraft turn their nose into the wind (crab angle) so aloft crosswinds push them straight along their ground track.<br>"
+                            "2. <b>Jetstream Highway Acceleration:</b> High-altitude jetstreams (100–180 mph) provide powerful tailwinds for Eastbound flights, shortening flight times by up to an hour.<br>"
+                            "3. <b>Tactical Storm Cell Avoidance:</b> Pilots use airborne NEXRAD weather radar to request 10–20 mile deviations around thunderstorm cells to avoid severe hail and turbulence.<br>"
+                            "4. <b>Airport Holding & Spacing:</b> Storms or gusty tailwinds near airports force ATC to increase aircraft separation from 3 miles to 5+ miles, creating holding patterns."
                 })
 
             if "turn" in query_lower or "circle" in query_lower or "holding" in query_lower:
