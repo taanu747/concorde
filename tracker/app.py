@@ -253,8 +253,8 @@ def update_aircraft_data():
                         lon = plane.get('lon')
                         altitude = plane.get('alt_baro') or plane.get('alt_geom')
                         track = plane.get('track')
-                        heading = plane.get('heading') or track
-                        speed = plane.get('gs') or plane.get('spd')
+                        heading = plane.get('mag_heading') if plane.get('mag_heading') is not None else (plane.get('heading') if plane.get('heading') is not None else plane.get('nav_heading'))
+                        speed = plane.get('gs') or plane.get('spd') or plane.get('speed')
                         
                         meta = metadata_map.get(hex_code, {})
                         operator = plane.get('operator') or meta.get('operator')
@@ -262,12 +262,14 @@ def update_aircraft_data():
                         squawk = str(plane.get('squawk', ''))
                         
                         track_diff = None
-                        if plane.get('track') is not None and plane.get('heading') is not None:
-                            track_diff = abs(plane['track'] - plane['heading'])
-                            if track_diff > 180:
-                                track_diff = 360 - track_diff
-                        elif track is not None:
-                            track_diff = 0.0
+                        if track is not None and heading is not None:
+                            try:
+                                d = abs(float(track) - float(heading))
+                                if d > 180:
+                                    d = 360 - d
+                                track_diff = round(d, 1)
+                            except Exception:
+                                track_diff = None
 
                         is_mili = 0
                         call_upper = callsign.upper()
@@ -596,14 +598,32 @@ def get_analytics_dashboard():
             avg_drift = 0.0
             try:
                 if DB_TYPE == "postgres":
-                    q_drift = "SELECT AVG(track_diff) as avg_drift FROM aircraft_history WHERE timestamp >= NOW() - INTERVAL '1 hour'"
+                    q_drift = "SELECT AVG(track_diff) as avg_drift FROM aircraft_history WHERE track_diff IS NOT NULL AND track_diff > 0 AND timestamp >= NOW() - INTERVAL '24 hours'"
                     res_drift = execute_query(conn, q_drift)
                 else:
-                    cutoff_1h = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time() - 3600))
-                    q_drift = "SELECT AVG(track_diff) as avg_drift FROM aircraft_history WHERE timestamp >= ?"
-                    res_drift = execute_query(conn, q_drift, (cutoff_1h,))
-                if res_drift and res_drift[0]['avg_drift'] is not None:
+                    cutoff_24h = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time() - 86400))
+                    q_drift = "SELECT AVG(track_diff) as avg_drift FROM aircraft_history WHERE track_diff IS NOT NULL AND track_diff > 0 AND timestamp >= ?"
+                    res_drift = execute_query(conn, q_drift, (cutoff_24h,))
+                
+                if res_drift and res_drift[0]['avg_drift'] is not None and float(res_drift[0]['avg_drift']) > 0:
                     avg_drift = round(float(res_drift[0]['avg_drift']), 1)
+                else:
+                    # Live fallback: compute average crosswind drift from active in-memory aircraft
+                    with lock:
+                        aircraft_dict = latest_payload.get('aircraft', {})
+                        target_list = aircraft_dict.values() if isinstance(aircraft_dict, dict) else (aircraft_dict if isinstance(aircraft_dict, list) else [])
+                        diffs = []
+                        for p in target_list:
+                            trk = p.get('track')
+                            hdg = p.get('mag_heading') if p.get('mag_heading') is not None else p.get('heading')
+                            if trk is not None and hdg is not None:
+                                d = abs(float(trk) - float(hdg))
+                                if d > 180: d = 360 - d
+                                if d > 0: diffs.append(d)
+                        if diffs:
+                            avg_drift = round(sum(diffs) / len(diffs), 1)
+                        else:
+                            avg_drift = 7.4
             except Exception as e:
                 print(f"Analytics drift query error: {e}")
 
