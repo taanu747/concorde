@@ -782,14 +782,10 @@ def ai_copilot_query():
             # -------------------------------------------------------------
             # STEP 2: Aircraft Intent Explanation ("Why is my flight doing that?")
             # -------------------------------------------------------------
-            if aircraft_state or extracted_callsign:
-                if not aircraft_state and extracted_callsign:
-                    return jsonify({
-                        "type": "explanation",
-                        "text": f"<b>🤖 AI Co-Pilot Flight Search:</b><br><br>"
-                                f"Flight <b>{extracted_callsign}</b> is not currently active in your local feeder's live view or recorded in your 7-day database history.<br><br>"
-                                f"• <b>Airspace Coverage Note:</b> Your feeder tracks aircraft within ~150–250 miles. Aircraft operating in distant states or overseas will only appear in your database when they enter your regional airspace."
-                    })
+            # Only trigger flight intent mode if a callsign was extracted OR query asks about flight intent
+            is_intent_query = bool(extracted_callsign) or any(w in query_lower for w in ["doing that", "flight intent", "doing", "this plane", "selected", "why is flight", "explain selected", "doing what"])
+            
+            if aircraft_state and is_intent_query:
                 callsign = aircraft_state.get('flight') or aircraft_state.get('callsign') or aircraft_state.get('hex', 'Selected Aircraft')
                 hex_code = str(aircraft_state.get('hex', 'N/A')).upper()
                 alt_raw = aircraft_state.get('alt_baro') if aircraft_state.get('alt_baro') is not None else (aircraft_state.get('altitude') or 0)
@@ -814,6 +810,11 @@ def ai_copilot_query():
                     explanations.append(f"<b>📈 Transition Climb / Descent:</b> Climbing or descending through intermediate flight levels ({alt:,} ft) at {spd} kts between airport terminal zones and high-altitude airways.")
                 else:
                     explanations.append(f"<b>✈️ En-Route Jetway Cruise:</b> Cruising at high altitude ({alt:,} ft) at {spd} kts. Following assigned Jet Airways in controlled upper airspace.")
+
+                # Turboprop / Light Aircraft Maneuvering & Pattern Work
+                is_turboprop = any(tp in (model or '').upper() for tp in ['C208', 'BE20', 'DH8A', 'DH8D', 'AT72', 'AT45', 'PC12', 'B350', 'SW4', 'C25A', 'E120', 'SF34', 'KING AIR', 'CARAVAN', 'DASH 8']) or (alt > 0 and alt < 15000 and spd > 0 and spd < 220)
+                if is_turboprop:
+                    explanations.append(f"<b>🔄 Turboprop Low-Altitude Turning & Pattern Work:</b> Slower regional turboprops and light aircraft ({model}) fly below 15,000 ft and execute frequent 90°–360° turns for local VFR airfield patterns, low-altitude ATC vectoring around high-speed jetliners, or aerial surveying flights.")
 
                 # Atmospheric Wind & Crab Angle Offset
                 if track is not None and heading is not None:
@@ -953,14 +954,15 @@ def ai_copilot_query():
                             "4. <b>Airport Holding & Spacing:</b> Storms or gusty tailwinds near airports force ATC to increase aircraft separation from 3 miles to 5+ miles, creating holding patterns."
                 })
 
-            if "turn" in query_lower or "circle" in query_lower or "holding" in query_lower:
+            if "turboprop" in query_lower or "prop" in query_lower or "turn" in query_lower or "turning" in query_lower or "circle" in query_lower or "holding" in query_lower:
                 return jsonify({
                     "type": "explanation",
-                    "text": "<b>🔄 Aircraft Turns & Holding Patterns:</b><br><br>"
-                            "Aircraft execute turns or circular race-track holding patterns for three primary reasons:<br><br>"
-                            "1. <b>ATC Sequencing:</b> Delaying arrivals to maintain standard 3-5 mile separation.<br>"
-                            "2. <b>Terminal Alignment:</b> Following STAR arrival procedures to align with runway ILS glideslopes.<br>"
-                            "3. <b>Destination Weather:</b> Awaiting thunderstorm clearance or runway snow clearing."
+                    "text": "<b>🔄 Why Turboprops & Light Aircraft Turn So Much:</b><br><br>"
+                            "Small turboprops and regional prop planes (e.g., Beechcraft King Air, Dash-8, ATR-72, Cessna Caravan) execute frequent steep turns for 4 primary reasons:<br><br>"
+                            "1. <b>Airfield Traffic Patterns:</b> Slower regional aircraft fly tight 90° and 180° touch-and-go landing circuits around local airport runways.<br>"
+                            "2. <b>Low-Altitude ATC Vectoring:</b> Cruising below 15,000 ft requires Air Traffic Control to give tactical heading turns to sequence slower turboprops around high-speed commercial jetliners.<br>"
+                            "3. <b>Tight Turning Radius:</b> Operating at lower speeds (150–220 knots) allows turboprops to make sharp 360° bank turns in a small fraction of the airspace required by large jetliners.<br>"
+                            "4. <b>Aerial Surveying & Inspection:</b> Specialized twin-turboprops fly back-and-forth grid patterns for geographic surveying, pipeline inspection, and flight calibration."
                 })
 
             # -------------------------------------------------------------

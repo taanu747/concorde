@@ -1574,7 +1574,7 @@ const sendAiQuery = async (queryText, aircraftObj = null) => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 query: queryText,
-                aircraft: aircraftObj || (selectedHex ? aircraftData[selectedHex] : null)
+                aircraft: aircraftObj || null
             })
         });
 
