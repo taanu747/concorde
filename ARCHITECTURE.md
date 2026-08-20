@@ -116,18 +116,20 @@ concorde/
 3. **7-Day Heatmap Streamlines**:
    - Requests `/api/history` to load historical coordinates, feeding `Leaflet.heat` to render high-density flight corridors and terminal arrival clusters.
 
-### Phase 4: AI Airspace Co-Pilot Engine (`/api/ai/query`)
-1. **Natural Language Router**:
-   - Parses user prompts using keyword intent routing and candidate token extraction.
-   - Excludes standard English words while identifying valid callsigns (e.g. `DAL123`, `EDV5254`) or 6-character hex codes (`AE13B4`).
-2. **Flight Intent Classifier**:
+### Phase 4: AI Airspace Co-Pilot Engine (`tracker/ai/copilot.py`)
+1. **Hybrid Google Gemini 1.5 Flash LLM Integration**:
+   - Evaluates `GEMINI_API_KEY` / `GOOGLE_API_KEY` environment variables.
+   - When configured, queries the **Google Gemini 1.5 Flash LLM** (`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent`), injecting live ADS-B telemetry and database context for dynamic natural language explanations.
+2. **Local Expert Rule Fallback**:
+   - If no LLM key is set, automatically falls back to an offline rule-based expert classifier.
+   - Identifies candidate flight callsigns (e.g. `DAL123`, `EDV5254`) and 6-character hex codes (`AE13B4`), returning helpful coverage notices if a flight is outside the receiver's ~200-mile range.
+3. **Flight Intent & Telemetry Classifier**:
    - **Ground Taxi**: Altitude 0 ft / `'ground'`.
    - **Initial Takeoff / Short Approach**: Altitude < 3,000 ft.
    - **Terminal Maneuvering Area (TMA)**: Altitude 3,000–10,000 ft (evaluating the 250-knot speed limit rule).
    - **Transition Climb / Descent**: Altitude 10,000–28,000 ft.
    - **En-Route Jetway Cruise**: Altitude > 28,000 ft.
-   - **Wind Crab Angle Compensation**: Evaluates $| \text{track} - \text{heading} | \ge 2.5^\circ$ to explain pilot/autopilot crosswind correction.
-3. **Educational Knowledge Engine**: Answers natural language questions on altitude differences, Great Circle curved flight paths, weather storm deviations, holding patterns, and squawk emergency codes.
+   - **Wind Crab Angle Compensation**: Calculates $| \text{track} - \text{heading} | \ge 2.5^\circ$ to explain pilot crosswind correction.
 
 ---
 
