@@ -1,59 +1,12 @@
 """
 AI Airspace Co-Pilot Engine
-Processes natural language queries using Google Gemini 1.5 Flash LLM (when API key is provided)
-or local expert rules fallback for real-time ADS-B flight intent & airspace analytics.
+Processes natural language queries, evaluates live aircraft telemetry,
+calculates wind crab angle drift, and generates dynamic SQL queries.
 """
 
-import os
 import re
 import time
-import json
-import requests
 from flask import jsonify
-
-def query_gemini_llm(user_query, context_info, api_key):
-    """Query Google Gemini LLM for dynamic natural language explanations across supported model endpoints."""
-    models_to_try = [
-        "gemini-3.6-flash",
-        "gemini-2.5-flash",
-        "gemini-1.5-flash",
-        "gemini-2.0-flash",
-        "gemini-1.5-pro"
-    ]
-    for model_name in models_to_try:
-        try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
-            headers = {"Content-Type": "application/json"}
-            
-            system_instruction = (
-                "You are the AI Airspace Co-Pilot for Concorde ADS-B Flight Tracker (Congressional App Contest entry). "
-                "Your job is to explain air traffic telemetry, aircraft intent, wind drift, weather impact, and airspace questions. "
-                "Use the provided context data to answer the user question. Keep your answer clear, educational, concise, "
-                "and formatted in clean HTML (using <b>, <i>, <br>, bullet points). Never invent fake aircraft data if not in context."
-            )
-            
-            prompt = f"{system_instruction}\n\nContext Telemetry & Database Information:\n{json.dumps(context_info, indent=2)}\n\nUser Question: {user_query}"
-            
-            payload = {
-                "contents": [{
-                    "parts": [{"text": prompt}]
-                }],
-                "generationConfig": {
-                    "temperature": 0.3,
-                    "maxOutputTokens": 600
-                }
-            }
-            res = requests.post(url, headers=headers, json=payload, timeout=9)
-            if res.status_code == 200:
-                data = res.json()
-                candidates = data.get('candidates', [])
-                if candidates and 'content' in candidates[0]:
-                    parts = candidates[0]['content'].get('parts', [])
-                    if parts:
-                        return parts[0].get('text', '').strip()
-        except Exception as e:
-            print(f"Gemini API ({model_name}) query exception: {e}")
-    return None
 
 def safe_round(val, decimals=0):
     """Safely round numbers, handling 'ground', None, and string types without exceptions."""
@@ -68,10 +21,9 @@ def process_ai_query(user_query, aircraft_state, conn, latest_payload, lock, db_
     """
     Main processing pipeline for AI Airspace Co-Pilot.
     Evaluates natural language intent, extracts callsigns, computes live telemetry intent,
-    and returns structured HTML tables or explanations using Gemini LLM or local expert fallback.
+    and returns structured HTML tables or explanations.
     """
     query_lower = user_query.lower()
-    gemini_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
     
     # -------------------------------------------------------------
     # STEP 1: Callsign / Hex Extraction from User Prompt
@@ -134,44 +86,6 @@ def process_ai_query(user_query, aircraft_state, conn, latest_payload, lock, db_
                 break
 
     # -------------------------------------------------------------
-    # OPTIONAL: Gemini Generative AI Engine (If GEMINI_API_KEY set)
-    # -------------------------------------------------------------
-    if gemini_key:
-        db_records = []
-        try:
-            cutoff_14d = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time() - 14 * 86400))
-            if "low" in query_lower:
-                q = "SELECT hex, callsign, altitude, speed, model, operator FROM aircraft_history WHERE altitude IS NOT NULL AND altitude > 0 AND timestamp >= ? ORDER BY altitude ASC LIMIT 5"
-                if db_type == "postgres": q = q.replace("?", "%s")
-                db_records = execute_query(conn, q, (cutoff_14d,)) or []
-            elif "fast" in query_lower or "speed" in query_lower:
-                q = "SELECT hex, callsign, altitude, speed, model, operator FROM aircraft_history WHERE speed IS NOT NULL AND speed > 0 AND timestamp >= ? ORDER BY speed DESC LIMIT 5"
-                if db_type == "postgres": q = q.replace("?", "%s")
-                db_records = execute_query(conn, q, (cutoff_14d,)) or []
-            elif "model" in query_lower:
-                q = "SELECT COALESCE(NULLIF(model, ''), 'Light Aircraft') as name, COUNT(DISTINCT hex) as flight_count FROM aircraft_history WHERE model IS NOT NULL AND model != '' AND timestamp >= ? GROUP BY name ORDER BY flight_count DESC LIMIT 5"
-                if db_type == "postgres": q = q.replace("?", "%s")
-                db_records = execute_query(conn, q, (cutoff_14d,)) or []
-            elif "airline" in query_lower or "operator" in query_lower:
-                q = "SELECT COALESCE(NULLIF(operator, ''), 'General Aviation / Private') as name, COUNT(DISTINCT hex) as flight_count FROM aircraft_history WHERE operator IS NOT NULL AND operator != '' AND timestamp >= ? GROUP BY name ORDER BY flight_count DESC LIMIT 5"
-                if db_type == "postgres": q = q.replace("?", "%s")
-                db_records = execute_query(conn, q, (cutoff_14d,)) or []
-        except Exception as e:
-            print(f"Gemini DB pre-fetch error: {e}")
-
-        context_info = {
-            "selected_aircraft": aircraft_state,
-            "extracted_callsign": extracted_callsign,
-            "database_records": db_records
-        }
-        llm_text = query_gemini_llm(user_query, context_info, gemini_key)
-        if llm_text:
-            return jsonify({
-                "type": "explanation",
-                "text": llm_text
-            })
-
-    # -------------------------------------------------------------
     # STEP 2: Aircraft Intent Explanation ("Why is my flight doing that?")
     # -------------------------------------------------------------
     if aircraft_state or extracted_callsign:
@@ -182,7 +96,6 @@ def process_ai_query(user_query, aircraft_state, conn, latest_payload, lock, db_
                         f"Flight <b>{extracted_callsign}</b> is not currently active in your local feeder's live view or recorded in your 7-day database history.<br><br>"
                         f"• <b>Airspace Coverage Note:</b> Your feeder tracks aircraft within ~150–250 miles. Aircraft operating in distant states or overseas will only appear in your database when they enter your regional airspace."
             })
-
         callsign = aircraft_state.get('flight') or aircraft_state.get('callsign') or aircraft_state.get('hex', 'Selected Aircraft')
         hex_code = str(aircraft_state.get('hex', 'N/A')).upper()
         alt_raw = aircraft_state.get('alt_baro') if aircraft_state.get('alt_baro') is not None else (aircraft_state.get('altitude') or 0)
@@ -443,15 +356,6 @@ def process_ai_query(user_query, aircraft_state, conn, latest_payload, lock, db_
             "text": "Here are recent military and special operation aircraft tracked in your airspace:",
             "table": rows
         })
-
-    # Fallback: Query Gemini LLM if API key is configured
-    if gemini_key:
-        llm_response = query_gemini_llm(user_query, {"user_query": user_query, "aircraft_state": aircraft_state}, gemini_key)
-        if llm_response:
-            return jsonify({
-                "type": "explanation",
-                "text": llm_response
-            })
 
     # Fallback Helpful Guidance
     return jsonify({

@@ -117,19 +117,19 @@ concorde/
    - Requests `/api/history` to load historical coordinates, feeding `Leaflet.heat` to render high-density flight corridors and terminal arrival clusters.
 
 ### Phase 4: AI Airspace Co-Pilot Engine (`tracker/ai/copilot.py`)
-1. **Hybrid Google Gemini 1.5 Flash LLM Integration**:
-   - Evaluates `GEMINI_API_KEY` / `GOOGLE_API_KEY` environment variables.
-   - When configured, queries the **Google Gemini 1.5 Flash LLM** (`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent`), injecting live ADS-B telemetry and database context for dynamic natural language explanations.
-2. **Local Expert Rule Fallback**:
-   - If no LLM key is set, automatically falls back to an offline rule-based expert classifier.
-   - Identifies candidate flight callsigns (e.g. `DAL123`, `EDV5254`) and 6-character hex codes (`AE13B4`), returning helpful coverage notices if a flight is outside the receiver's ~200-mile range.
-3. **Flight Intent & Telemetry Classifier**:
+1. **Modular AI Package Architecture**:
+   - Extracted from `app.py` into a clean modular package (`tracker/ai/copilot.py` & `tracker/ai/__init__.py`).
+2. **Flight Intent Telemetry & Wind Drift Classifier**:
    - **Ground Taxi**: Altitude 0 ft / `'ground'`.
    - **Initial Takeoff / Short Approach**: Altitude < 3,000 ft.
    - **Terminal Maneuvering Area (TMA)**: Altitude 3,000–10,000 ft (evaluating the 250-knot speed limit rule).
    - **Transition Climb / Descent**: Altitude 10,000–28,000 ft.
    - **En-Route Jetway Cruise**: Altitude > 28,000 ft.
    - **Wind Crab Angle Compensation**: Calculates $| \text{track} - \text{heading} | \ge 2.5^\circ$ to explain pilot crosswind correction.
+3. **Database Text-to-SQL Query Generator**:
+   - Converts natural language queries (*"What was the lowest flight recorded?"*, *"Top airlines"*, *"Fastest planes"*, *"Military flights"*) into dynamic SQL queries executed live against PostgreSQL / SQLite.
+4. **Aviation Domain Knowledge Engine**:
+   - Answers educational questions on altitude rules (semi-circular rule), Great Circle curved flight paths, weather radar storm cell avoidance, holding pattern orbits, and emergency squawk codes (`7500`, `7600`, `7700`).
 
 ---
 
