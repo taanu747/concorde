@@ -116,9 +116,9 @@ concorde/
 3. **7-Day Heatmap Streamlines**:
    - Requests `/api/history` to load historical coordinates, feeding `Leaflet.heat` to render high-density flight corridors and terminal arrival clusters.
 
-### Phase 4: AI Airspace Co-Pilot Engine (`tracker/ai/copilot.py`)
-1. **Modular AI Package Architecture**:
-   - Extracted from `app.py` into a clean modular package (`tracker/ai/copilot.py` & `tracker/ai/__init__.py`).
+### Phase 4: AI Airspace Co-Pilot Engine (`tracker/app.py` -> `/api/ai/query`)
+1. **Self-Contained Serverless Architecture**:
+   - Integrated directly into `tracker/app.py` for 100% Vercel serverless import reliability without sub-package module resolution errors.
 2. **Flight Intent Telemetry & Wind Drift Classifier**:
    - **Ground Taxi**: Altitude 0 ft / `'ground'`.
    - **Initial Takeoff / Short Approach**: Altitude < 3,000 ft.
