@@ -137,7 +137,7 @@ def process_ai_query(user_query, aircraft_state, conn, latest_payload, lock, db_
                         f"• <b>Airspace Coverage Note:</b> Your feeder tracks aircraft within ~150–250 miles. Aircraft operating in distant states or overseas will only appear in your database when they enter your regional airspace."
             })
         
-        # If Gemini API key is configured, use Gemini 1.5 Flash LLM to generate response!
+        # If Gemini API key is configured, attempt Gemini 1.5 Flash LLM query first
         if gemini_key and aircraft_state:
             llm_text = query_gemini_llm(user_query, aircraft_state, gemini_key)
             if llm_text:
@@ -145,6 +145,7 @@ def process_ai_query(user_query, aircraft_state, conn, latest_payload, lock, db_
                     "type": "explanation",
                     "text": llm_text
                 })
+            print("Gemini API query returned None (invalid key or error), proceeding with expert rules engine.")
 
         callsign = aircraft_state.get('flight') or aircraft_state.get('callsign') or aircraft_state.get('hex', 'Selected Aircraft')
         hex_code = str(aircraft_state.get('hex', 'N/A')).upper()
