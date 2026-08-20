@@ -12,39 +12,47 @@ import requests
 from flask import jsonify
 
 def query_gemini_llm(user_query, context_info, api_key):
-    """Query Google Gemini 1.5 Flash LLM for dynamic natural language explanations."""
-    try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
-        headers = {"Content-Type": "application/json"}
-        
-        system_instruction = (
-            "You are the AI Airspace Co-Pilot for Concorde ADS-B Flight Tracker (Congressional App Contest entry). "
-            "Your job is to explain air traffic telemetry, aircraft intent, wind drift, weather impact, and airspace questions. "
-            "Use the provided context data to answer the user question. Keep your answer clear, educational, concise, "
-            "and formatted in clean HTML (using <b>, <i>, <br>, bullet points). Never invent fake aircraft data if not in context."
-        )
-        
-        prompt = f"{system_instruction}\n\nContext Telemetry & Database Information:\n{json.dumps(context_info, indent=2)}\n\nUser Question: {user_query}"
-        
-        payload = {
-            "contents": [{
-                "parts": [{"text": prompt}]
-            }],
-            "generationConfig": {
-                "temperature": 0.3,
-                "maxOutputTokens": 600
+    """Query Google Gemini LLM for dynamic natural language explanations across supported model endpoints."""
+    models_to_try = [
+        "gemini-3.6-flash",
+        "gemini-2.5-flash",
+        "gemini-1.5-flash",
+        "gemini-2.0-flash",
+        "gemini-1.5-pro"
+    ]
+    for model_name in models_to_try:
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+            headers = {"Content-Type": "application/json"}
+            
+            system_instruction = (
+                "You are the AI Airspace Co-Pilot for Concorde ADS-B Flight Tracker (Congressional App Contest entry). "
+                "Your job is to explain air traffic telemetry, aircraft intent, wind drift, weather impact, and airspace questions. "
+                "Use the provided context data to answer the user question. Keep your answer clear, educational, concise, "
+                "and formatted in clean HTML (using <b>, <i>, <br>, bullet points). Never invent fake aircraft data if not in context."
+            )
+            
+            prompt = f"{system_instruction}\n\nContext Telemetry & Database Information:\n{json.dumps(context_info, indent=2)}\n\nUser Question: {user_query}"
+            
+            payload = {
+                "contents": [{
+                    "parts": [{"text": prompt}]
+                }],
+                "generationConfig": {
+                    "temperature": 0.3,
+                    "maxOutputTokens": 600
+                }
             }
-        }
-        res = requests.post(url, headers=headers, json=payload, timeout=6)
-        if res.status_code == 200:
-            data = res.json()
-            candidates = data.get('candidates', [])
-            if candidates and 'content' in candidates[0]:
-                parts = candidates[0]['content'].get('parts', [])
-                if parts:
-                    return parts[0].get('text', '').strip()
-    except Exception as e:
-        print(f"Gemini API query exception: {e}")
+            res = requests.post(url, headers=headers, json=payload, timeout=4)
+            if res.status_code == 200:
+                data = res.json()
+                candidates = data.get('candidates', [])
+                if candidates and 'content' in candidates[0]:
+                    parts = candidates[0]['content'].get('parts', [])
+                    if parts:
+                        return parts[0].get('text', '').strip()
+        except Exception as e:
+            print(f"Gemini API ({model_name}) query exception: {e}")
     return None
 
 def safe_round(val, decimals=0):
