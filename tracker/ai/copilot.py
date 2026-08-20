@@ -43,7 +43,7 @@ def query_gemini_llm(user_query, context_info, api_key):
                     "maxOutputTokens": 600
                 }
             }
-            res = requests.post(url, headers=headers, json=payload, timeout=4)
+            res = requests.post(url, headers=headers, json=payload, timeout=9)
             if res.status_code == 200:
                 data = res.json()
                 candidates = data.get('candidates', [])
@@ -134,6 +134,44 @@ def process_ai_query(user_query, aircraft_state, conn, latest_payload, lock, db_
                 break
 
     # -------------------------------------------------------------
+    # OPTIONAL: Gemini Generative AI Engine (If GEMINI_API_KEY set)
+    # -------------------------------------------------------------
+    if gemini_key:
+        db_records = []
+        try:
+            cutoff_14d = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time() - 14 * 86400))
+            if "low" in query_lower:
+                q = "SELECT hex, callsign, altitude, speed, model, operator FROM aircraft_history WHERE altitude IS NOT NULL AND altitude > 0 AND timestamp >= ? ORDER BY altitude ASC LIMIT 5"
+                if db_type == "postgres": q = q.replace("?", "%s")
+                db_records = execute_query(conn, q, (cutoff_14d,)) or []
+            elif "fast" in query_lower or "speed" in query_lower:
+                q = "SELECT hex, callsign, altitude, speed, model, operator FROM aircraft_history WHERE speed IS NOT NULL AND speed > 0 AND timestamp >= ? ORDER BY speed DESC LIMIT 5"
+                if db_type == "postgres": q = q.replace("?", "%s")
+                db_records = execute_query(conn, q, (cutoff_14d,)) or []
+            elif "model" in query_lower:
+                q = "SELECT COALESCE(NULLIF(model, ''), 'Light Aircraft') as name, COUNT(DISTINCT hex) as flight_count FROM aircraft_history WHERE model IS NOT NULL AND model != '' AND timestamp >= ? GROUP BY name ORDER BY flight_count DESC LIMIT 5"
+                if db_type == "postgres": q = q.replace("?", "%s")
+                db_records = execute_query(conn, q, (cutoff_14d,)) or []
+            elif "airline" in query_lower or "operator" in query_lower:
+                q = "SELECT COALESCE(NULLIF(operator, ''), 'General Aviation / Private') as name, COUNT(DISTINCT hex) as flight_count FROM aircraft_history WHERE operator IS NOT NULL AND operator != '' AND timestamp >= ? GROUP BY name ORDER BY flight_count DESC LIMIT 5"
+                if db_type == "postgres": q = q.replace("?", "%s")
+                db_records = execute_query(conn, q, (cutoff_14d,)) or []
+        except Exception as e:
+            print(f"Gemini DB pre-fetch error: {e}")
+
+        context_info = {
+            "selected_aircraft": aircraft_state,
+            "extracted_callsign": extracted_callsign,
+            "database_records": db_records
+        }
+        llm_text = query_gemini_llm(user_query, context_info, gemini_key)
+        if llm_text:
+            return jsonify({
+                "type": "explanation",
+                "text": llm_text
+            })
+
+    # -------------------------------------------------------------
     # STEP 2: Aircraft Intent Explanation ("Why is my flight doing that?")
     # -------------------------------------------------------------
     if aircraft_state or extracted_callsign:
@@ -144,16 +182,6 @@ def process_ai_query(user_query, aircraft_state, conn, latest_payload, lock, db_
                         f"Flight <b>{extracted_callsign}</b> is not currently active in your local feeder's live view or recorded in your 7-day database history.<br><br>"
                         f"• <b>Airspace Coverage Note:</b> Your feeder tracks aircraft within ~150–250 miles. Aircraft operating in distant states or overseas will only appear in your database when they enter your regional airspace."
             })
-        
-        # If Gemini API key is configured, attempt Gemini 1.5 Flash LLM query first
-        if gemini_key and aircraft_state:
-            llm_text = query_gemini_llm(user_query, aircraft_state, gemini_key)
-            if llm_text:
-                return jsonify({
-                    "type": "explanation",
-                    "text": llm_text
-                })
-            print("Gemini API query returned None (invalid key or error), proceeding with expert rules engine.")
 
         callsign = aircraft_state.get('flight') or aircraft_state.get('callsign') or aircraft_state.get('hex', 'Selected Aircraft')
         hex_code = str(aircraft_state.get('hex', 'N/A')).upper()
