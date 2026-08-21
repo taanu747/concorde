@@ -149,6 +149,41 @@ def init_db():
         print(f"init_db non-fatal notice: {e}")
 
 init_db()
+
+db_indexes_created = False
+index_lock = threading.Lock()
+
+def create_indexes_background():
+    """Build database indexes asynchronously in the background so cold starts and queries never block."""
+    global db_indexes_created
+    with index_lock:
+        if db_indexes_created:
+            return
+        try:
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                indexes = [
+                    'CREATE INDEX IF NOT EXISTS idx_hex ON aircraft_history(hex)',
+                    'CREATE INDEX IF NOT EXISTS idx_callsign ON aircraft_history(callsign)',
+                    'CREATE INDEX IF NOT EXISTS idx_timestamp ON aircraft_history(timestamp DESC)',
+                    'CREATE INDEX IF NOT EXISTS idx_altitude ON aircraft_history(altitude)',
+                    'CREATE INDEX IF NOT EXISTS idx_speed ON aircraft_history(speed DESC)',
+                    'CREATE INDEX IF NOT EXISTS idx_is_military ON aircraft_history(is_military, timestamp DESC)',
+                    'CREATE INDEX IF NOT EXISTS idx_operator ON aircraft_history(operator)',
+                    'CREATE INDEX IF NOT EXISTS idx_model ON aircraft_history(model)',
+                    'CREATE INDEX IF NOT EXISTS idx_track_diff ON aircraft_history(track_diff)'
+                ]
+                for idx in indexes:
+                    try:
+                        cursor.execute(idx)
+                        conn.commit()
+                    except Exception:
+                        if DB_TYPE == "postgres":
+                            try: conn.rollback()
+                            except Exception: pass
+                db_indexes_created = True
+        except Exception as e:
+            print(f"Background indexing notice: {e}")
 # AviationStack API Configuration 
 AVIATIONSTACK_API_KEY = "f6f24b7474f05dbbfe61a7fefcd0fef4"
 flight_route_cache = {}
@@ -542,6 +577,12 @@ def get_historical_aircraft_data():
 @app.route('/api/analytics/dashboard')
 def get_analytics_dashboard():
     """Return aggregated stats for the local analytics dashboard with indexed fast batch queries."""
+    if not db_indexes_created:
+        try:
+            threading.Thread(target=create_indexes_background, daemon=True).start()
+        except Exception as e:
+            print(f"Background thread trigger notice: {e}")
+            
     try:
         with get_db_connection() as conn:
             cutoff_14d = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time() - 14 * 86400))
