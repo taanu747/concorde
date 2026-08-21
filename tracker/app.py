@@ -63,124 +63,110 @@ FEEDER_SECRET = os.environ.get("FEEDER_SECRET", "changeme")
 
 
 def init_db():
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        if DB_TYPE == "postgres":
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS aircraft_history (
-                    id SERIAL PRIMARY KEY,
-                    hex TEXT,
-                    callsign TEXT,
-                    lat REAL,
-                    lon REAL,
-                    altitude REAL,
-                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    heading REAL
-                )
-            ''')
-        else:
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS aircraft_history (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    hex TEXT,
-                    callsign TEXT,
-                    lat REAL,
-                    lon REAL,
-                    altitude REAL,
-                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    heading REAL
-                )
-            ''')
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            if DB_TYPE == "postgres":
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS aircraft_history (
+                        id SERIAL PRIMARY KEY,
+                        hex TEXT,
+                        callsign TEXT,
+                        lat REAL,
+                        lon REAL,
+                        altitude REAL,
+                        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        heading REAL
+                    )
+                ''')
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS latest_payload (
+                        id INTEGER PRIMARY KEY,
+                        payload TEXT,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS aircraft_metadata (
+                        icao24 TEXT PRIMARY KEY,
+                        registration TEXT,
+                        model TEXT,
+                        typecode TEXT,
+                        operator TEXT
+                    )
+                ''')
+                conn.commit()
+            else:
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS aircraft_history (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        hex TEXT,
+                        callsign TEXT,
+                        lat REAL,
+                        lon REAL,
+                        altitude REAL,
+                        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        heading REAL
+                    )
+                ''')
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS latest_payload (
+                        id INTEGER PRIMARY KEY,
+                        payload TEXT,
+                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS aircraft_metadata (
+                        icao24 TEXT PRIMARY KEY,
+                        registration TEXT,
+                        model TEXT,
+                        typecode TEXT,
+                        operator TEXT
+                    )
+                ''')
+                conn.commit()
+            
+            # STEP 1: Add missing columns FIRST before creating indexes on them!
+            alter_cols = [
+                ("speed", "REAL"),
+                ("track", "REAL"),
+                ("track_diff", "REAL"),
+                ("operator", "TEXT"),
+                ("model", "TEXT"),
+                ("is_military", "INTEGER DEFAULT 0")
+            ]
+            for col_name, col_type in alter_cols:
+                try:
+                    cursor.execute(f"ALTER TABLE aircraft_history ADD COLUMN {col_name} {col_type}")
+                    conn.commit()
+                except Exception:
+                    if DB_TYPE == "postgres":
+                        try: conn.rollback()
+                        except Exception: pass
 
-        # Create stateless tables
-        if DB_TYPE == "postgres":
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS latest_payload (
-                    id INTEGER PRIMARY KEY,
-                    payload TEXT,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS aircraft_metadata (
-                    icao24 TEXT PRIMARY KEY,
-                    registration TEXT,
-                    model TEXT,
-                    typecode TEXT,
-                    operator TEXT
-                )
-            ''')
-        else:
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS latest_payload (
-                    id INTEGER PRIMARY KEY,
-                    payload TEXT,
-                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS aircraft_metadata (
-                    icao24 TEXT PRIMARY KEY,
-                    registration TEXT,
-                    model TEXT,
-                    typecode TEXT,
-                    operator TEXT
-                )
-            ''')
-        
-        # Create indexes for lightning-fast search & analytics
-        indexes = [
-            'CREATE INDEX IF NOT EXISTS idx_hex ON aircraft_history(hex)',
-            'CREATE INDEX IF NOT EXISTS idx_callsign ON aircraft_history(callsign)',
-            'CREATE INDEX IF NOT EXISTS idx_timestamp ON aircraft_history(timestamp DESC)',
-            'CREATE INDEX IF NOT EXISTS idx_altitude ON aircraft_history(altitude)',
-            'CREATE INDEX IF NOT EXISTS idx_speed ON aircraft_history(speed DESC)',
-            'CREATE INDEX IF NOT EXISTS idx_is_military ON aircraft_history(is_military, timestamp DESC)',
-            'CREATE INDEX IF NOT EXISTS idx_operator ON aircraft_history(operator)',
-            'CREATE INDEX IF NOT EXISTS idx_model ON aircraft_history(model)',
-            'CREATE INDEX IF NOT EXISTS idx_track_diff ON aircraft_history(track_diff)'
-        ]
-        for idx in indexes:
-            try:
-                cursor.execute(idx)
-            except Exception:
-                pass
-        
-        # Safely add extended columns for analytics
-        alter_cols = [
-            ("speed", "REAL"),
-            ("track", "REAL"),
-            ("track_diff", "REAL"),
-            ("operator", "TEXT"),
-            ("model", "TEXT"),
-            ("is_military", "INTEGER DEFAULT 0")
-        ]
-        for col_name, col_type in alter_cols:
-            try:
-                cursor.execute(f"ALTER TABLE aircraft_history ADD COLUMN {col_name} {col_type}")
-            except Exception:
-                pass # Column already exists
-
-        conn.commit()
-
-def ensure_db_indexes(conn):
-    """Ensure database indexes exist on connection for lightning-fast analytics queries."""
-    indexes = [
-        'CREATE INDEX IF NOT EXISTS idx_hex ON aircraft_history(hex)',
-        'CREATE INDEX IF NOT EXISTS idx_callsign ON aircraft_history(callsign)',
-        'CREATE INDEX IF NOT EXISTS idx_timestamp ON aircraft_history(timestamp DESC)',
-        'CREATE INDEX IF NOT EXISTS idx_altitude ON aircraft_history(altitude)',
-        'CREATE INDEX IF NOT EXISTS idx_speed ON aircraft_history(speed DESC)',
-        'CREATE INDEX IF NOT EXISTS idx_is_military ON aircraft_history(is_military, timestamp DESC)',
-        'CREATE INDEX IF NOT EXISTS idx_operator ON aircraft_history(operator)',
-        'CREATE INDEX IF NOT EXISTS idx_model ON aircraft_history(model)',
-        'CREATE INDEX IF NOT EXISTS idx_track_diff ON aircraft_history(track_diff)'
-    ]
-    for idx in indexes:
-        try:
-            execute_query(conn, idx)
-        except Exception:
-            pass
+            # STEP 2: Create indexes AFTER columns exist!
+            indexes = [
+                'CREATE INDEX IF NOT EXISTS idx_hex ON aircraft_history(hex)',
+                'CREATE INDEX IF NOT EXISTS idx_callsign ON aircraft_history(callsign)',
+                'CREATE INDEX IF NOT EXISTS idx_timestamp ON aircraft_history(timestamp DESC)',
+                'CREATE INDEX IF NOT EXISTS idx_altitude ON aircraft_history(altitude)',
+                'CREATE INDEX IF NOT EXISTS idx_speed ON aircraft_history(speed DESC)',
+                'CREATE INDEX IF NOT EXISTS idx_is_military ON aircraft_history(is_military, timestamp DESC)',
+                'CREATE INDEX IF NOT EXISTS idx_operator ON aircraft_history(operator)',
+                'CREATE INDEX IF NOT EXISTS idx_model ON aircraft_history(model)',
+                'CREATE INDEX IF NOT EXISTS idx_track_diff ON aircraft_history(track_diff)'
+            ]
+            for idx in indexes:
+                try:
+                    cursor.execute(idx)
+                    conn.commit()
+                except Exception:
+                    if DB_TYPE == "postgres":
+                        try: conn.rollback()
+                        except Exception: pass
+    except Exception as e:
+        print(f"init_db non-fatal warning: {e}")
 
 init_db()
 # AviationStack API Configuration 
