@@ -856,9 +856,13 @@ def ai_copilot_query():
                 
                 explanations = []
                 
+                is_light_piston = any(ga in (model or '').upper() for ga in ['172', 'C172', 'C152', 'C182', 'PA28', 'P28A', 'SR22', 'C150', 'DA40', 'DA20', 'C72R', 'SKYHAWK', 'CHEROKEE', 'ARCHER', 'CENTURION', 'BONANZA']) or (spd > 0 and spd < 125 and alt > 0 and alt < 4000)
+                
                 # Flight Phase & Altitude Intent
                 if alt_raw == 'ground' or alt == 0:
                     explanations.append("<b>📍 Ground Operations / Taxi:</b> Aircraft is currently stationary or taxiing on airport aprons/runways.")
+                elif is_light_piston and alt < 4000:
+                    explanations.append(f"<b>🧑‍✈️ General Aviation Flight Training / Local VFR Maneuvers:</b> Flying a light aircraft ({model}) at low altitude ({alt:,} ft) at {spd} kts. Operating under Visual Flight Rules (VFR), this pilot is likely practicing flight training maneuvers (360° steep turns, ground reference orbits, stall recovery) or conducting local airfield touch-and-go pattern work.")
                 elif alt < 3000:
                     explanations.append(f"<b>🛫 Initial Takeoff / Short Approach:</b> Flying at low altitude ({alt:,} ft) at {spd} kts. Operating within immediate airport control zone for runway departure or final landing approach.")
                 elif alt >= 3000 and alt < 10000:
