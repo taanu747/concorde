@@ -640,7 +640,7 @@ def get_historical_aircraft_data():
 
 @app.route('/api/analytics/dashboard')
 def get_analytics_dashboard():
-    """Return aggregated stats for the local analytics dashboard with indexed fast batch queries."""
+    """Return aggregated stats for the local analytics dashboard with indexed fast batch queries and fallback handlers."""
     if not db_indexes_created:
         try:
             threading.Thread(target=create_indexes_background, daemon=True).start()
@@ -671,7 +671,18 @@ def get_analytics_dashboard():
                         LIMIT 1
                     '''
                 res_lowest = execute_query(conn, q_lowest) if DB_TYPE == "postgres" else execute_query(conn, q_lowest, (cutoff_14d,))
-                if res_lowest: lowest = res_lowest[0]
+                if res_lowest:
+                    lowest = res_lowest[0]
+                else:
+                    q_lowest_fb = '''
+                        SELECT hex, callsign, altitude, speed, model, operator, timestamp
+                        FROM aircraft_history
+                        WHERE altitude IS NOT NULL AND altitude > 0
+                        ORDER BY altitude ASC
+                        LIMIT 1
+                    '''
+                    res_lowest = execute_query(conn, q_lowest_fb)
+                    if res_lowest: lowest = res_lowest[0]
             except Exception as e:
                 print(f"Analytics lowest query error: {e}")
 
@@ -695,7 +706,18 @@ def get_analytics_dashboard():
                         LIMIT 1
                     '''
                 res_fastest = execute_query(conn, q_fastest) if DB_TYPE == "postgres" else execute_query(conn, q_fastest, (cutoff_14d,))
-                if res_fastest: fastest = res_fastest[0]
+                if res_fastest:
+                    fastest = res_fastest[0]
+                else:
+                    q_fastest_fb = '''
+                        SELECT hex, callsign, altitude, speed, model, operator, timestamp
+                        FROM aircraft_history
+                        WHERE speed IS NOT NULL AND speed > 0
+                        ORDER BY speed DESC
+                        LIMIT 1
+                    '''
+                    res_fastest = execute_query(conn, q_fastest_fb)
+                    if res_fastest: fastest = res_fastest[0]
             except Exception as e:
                 print(f"Analytics fastest query error: {e}")
 
@@ -721,11 +743,31 @@ def get_analytics_dashboard():
                         LIMIT 1
                     '''
                 res_busiest = execute_query(conn, q_busiest) if DB_TYPE == "postgres" else execute_query(conn, q_busiest, (cutoff_14d,))
-                if res_busiest: busiest = res_busiest[0]
+                if res_busiest:
+                    busiest = res_busiest[0]
+                else:
+                    if DB_TYPE == "postgres":
+                        q_busiest_fb = '''
+                            SELECT EXTRACT(HOUR FROM timestamp)::text as hour_utc, COUNT(DISTINCT hex) as flight_count
+                            FROM aircraft_history
+                            GROUP BY EXTRACT(HOUR FROM timestamp)
+                            ORDER BY flight_count DESC
+                            LIMIT 1
+                        '''
+                    else:
+                        q_busiest_fb = '''
+                            SELECT strftime('%H', timestamp) as hour_utc, COUNT(DISTINCT hex) as flight_count
+                            FROM aircraft_history
+                            GROUP BY hour_utc
+                            ORDER BY flight_count DESC
+                            LIMIT 1
+                        '''
+                    res_busiest = execute_query(conn, q_busiest_fb)
+                    if res_busiest: busiest = res_busiest[0]
             except Exception as e:
                 print(f"Analytics busiest query error: {e}")
 
-            # 4. Average Crosswind Drift & Average Altitude (Batched single query)
+            # 4. Average Crosswind Drift & Average Altitude
             avg_drift = 0.0
             avg_alt = 0
             try:
@@ -748,11 +790,24 @@ def get_analytics_dashboard():
                     '''
                     res_stats = execute_query(conn, q_stats, (cutoff_14d,))
                 
-                if res_stats and res_stats[0]:
+                if res_stats and res_stats[0] and (res_stats[0]['avg_drift'] or res_stats[0]['avg_alt']):
                     if res_stats[0]['avg_drift'] is not None and float(res_stats[0]['avg_drift']) > 0:
                         avg_drift = round(float(res_stats[0]['avg_drift']), 1)
                     if res_stats[0]['avg_alt'] is not None:
                         avg_alt = round(float(res_stats[0]['avg_alt']))
+                else:
+                    q_stats_fb = '''
+                        SELECT 
+                            AVG(CASE WHEN track_diff > 0 THEN track_diff END) as avg_drift,
+                            AVG(CASE WHEN altitude > 0 THEN altitude END) as avg_alt
+                        FROM aircraft_history
+                    '''
+                    res_stats = execute_query(conn, q_stats_fb)
+                    if res_stats and res_stats[0]:
+                        if res_stats[0]['avg_drift'] is not None and float(res_stats[0]['avg_drift']) > 0:
+                            avg_drift = round(float(res_stats[0]['avg_drift']), 1)
+                        if res_stats[0]['avg_alt'] is not None:
+                            avg_alt = round(float(res_stats[0]['avg_alt']))
                 
                 if avg_drift == 0.0:
                     with lock:
@@ -793,7 +848,16 @@ def get_analytics_dashboard():
                         LIMIT 5
                     '''
                 top_airlines = execute_query(conn, q_top_airlines) if DB_TYPE == "postgres" else execute_query(conn, q_top_airlines, (cutoff_14d,))
-                top_airlines = top_airlines or []
+                if not top_airlines:
+                    q_top_airlines_fb = '''
+                        SELECT COALESCE(NULLIF(operator, ''), 'General Aviation / Private') as name, COUNT(DISTINCT hex) as flight_count
+                        FROM aircraft_history
+                        WHERE operator IS NOT NULL AND operator != ''
+                        GROUP BY 1
+                        ORDER BY flight_count DESC
+                        LIMIT 5
+                    '''
+                    top_airlines = execute_query(conn, q_top_airlines_fb) or []
             except Exception as e:
                 print(f"Analytics top_airlines query error: {e}")
 
@@ -819,6 +883,17 @@ def get_analytics_dashboard():
                         LIMIT 30
                     '''
                 raw_models = execute_query(conn, q_top_models) if DB_TYPE == "postgres" else execute_query(conn, q_top_models, (cutoff_14d,))
+                if not raw_models:
+                    q_top_models_fb = '''
+                        SELECT COALESCE(NULLIF(model, ''), 'Light Aircraft') as name, COUNT(DISTINCT hex) as flight_count
+                        FROM aircraft_history
+                        WHERE model IS NOT NULL AND model != ''
+                        GROUP BY 1
+                        ORDER BY flight_count DESC
+                        LIMIT 30
+                    '''
+                    raw_models = execute_query(conn, q_top_models_fb) or []
+                
                 if raw_models:
                     model_counts = {}
                     for item in raw_models:
@@ -830,16 +905,6 @@ def get_analytics_dashboard():
                     top_models = [{"name": name, "flight_count": count} for name, count in sorted_models]
             except Exception as e:
                 print(f"Analytics top_models query error: {e}")
-
-            # Clean up model names for lowest, fastest, and military flights
-            if lowest and lowest.get('model'):
-                lowest['model'] = clean_aircraft_model_name(lowest['model'])
-            if fastest and fastest.get('model'):
-                fastest['model'] = clean_aircraft_model_name(fastest['model'])
-            if military_flights:
-                for mf in military_flights:
-                    if mf.get('model'):
-                        mf['model'] = clean_aircraft_model_name(mf['model'])
 
             # 7. Recent Military Aircraft
             military_flights = []
@@ -861,9 +926,27 @@ def get_analytics_dashboard():
                         LIMIT 5
                     '''
                 military_flights = execute_query(conn, q_military) if DB_TYPE == "postgres" else execute_query(conn, q_military, (cutoff_14d,))
-                military_flights = military_flights or []
+                if not military_flights:
+                    q_military_fb = '''
+                        SELECT hex, callsign, altitude, speed, model, operator, timestamp
+                        FROM aircraft_history
+                        WHERE is_military = 1 AND (callsign IS NULL OR (callsign NOT LIKE 'AFR%' AND callsign NOT LIKE 'AFL%' AND callsign NOT LIKE 'AFE%'))
+                        ORDER BY timestamp DESC
+                        LIMIT 5
+                    '''
+                    military_flights = execute_query(conn, q_military_fb) or []
             except Exception as e:
                 print(f"Analytics military query error: {e}")
+
+            # Clean up model names for lowest, fastest, and military flights
+            if lowest and lowest.get('model'):
+                lowest['model'] = clean_aircraft_model_name(lowest['model'])
+            if fastest and fastest.get('model'):
+                fastest['model'] = clean_aircraft_model_name(fastest['model'])
+            if military_flights:
+                for mf in military_flights:
+                    if mf.get('model'):
+                        mf['model'] = clean_aircraft_model_name(mf['model'])
 
             return jsonify({
                 "lowest": lowest,
