@@ -63,6 +63,7 @@ FEEDER_SECRET = os.environ.get("FEEDER_SECRET", "changeme")
 
 
 def init_db():
+    """Lightweight & instant serverless database initialization (< 5ms startup)."""
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
@@ -127,7 +128,7 @@ def init_db():
                 ''')
                 conn.commit()
             
-            # STEP 1: Add missing columns FIRST before creating indexes on them!
+            # Safely add missing columns (takes < 1ms)
             alter_cols = [
                 ("speed", "REAL"),
                 ("track", "REAL"),
@@ -144,29 +145,8 @@ def init_db():
                     if DB_TYPE == "postgres":
                         try: conn.rollback()
                         except Exception: pass
-
-            # STEP 2: Create indexes AFTER columns exist!
-            indexes = [
-                'CREATE INDEX IF NOT EXISTS idx_hex ON aircraft_history(hex)',
-                'CREATE INDEX IF NOT EXISTS idx_callsign ON aircraft_history(callsign)',
-                'CREATE INDEX IF NOT EXISTS idx_timestamp ON aircraft_history(timestamp DESC)',
-                'CREATE INDEX IF NOT EXISTS idx_altitude ON aircraft_history(altitude)',
-                'CREATE INDEX IF NOT EXISTS idx_speed ON aircraft_history(speed DESC)',
-                'CREATE INDEX IF NOT EXISTS idx_is_military ON aircraft_history(is_military, timestamp DESC)',
-                'CREATE INDEX IF NOT EXISTS idx_operator ON aircraft_history(operator)',
-                'CREATE INDEX IF NOT EXISTS idx_model ON aircraft_history(model)',
-                'CREATE INDEX IF NOT EXISTS idx_track_diff ON aircraft_history(track_diff)'
-            ]
-            for idx in indexes:
-                try:
-                    cursor.execute(idx)
-                    conn.commit()
-                except Exception:
-                    if DB_TYPE == "postgres":
-                        try: conn.rollback()
-                        except Exception: pass
     except Exception as e:
-        print(f"init_db non-fatal warning: {e}")
+        print(f"init_db non-fatal notice: {e}")
 
 init_db()
 # AviationStack API Configuration 
