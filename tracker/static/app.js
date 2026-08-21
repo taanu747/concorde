@@ -1338,7 +1338,7 @@ const analyticsCloseBtn = document.getElementById('analytics-close-btn');
 const loadAnalyticsDashboard = async () => {
     const subtitleEl = document.getElementById('analytics-subtitle');
     if (subtitleEl) {
-        subtitleEl.textContent = '⏳ Querying database analytics (this may take a few seconds)...';
+        subtitleEl.textContent = '⏳ Loading aggregated airspace data...';
         subtitleEl.style.color = '#38bdf8';
     }
     try {
@@ -1346,8 +1346,8 @@ const loadAnalyticsDashboard = async () => {
         const data = await res.json();
 
         if (subtitleEl) {
-            subtitleEl.textContent = '⚡ Live Airspace Telemetry & Historical Aggregations';
-            subtitleEl.style.color = '#94a3b8';
+            subtitleEl.textContent = '📅 Airspace telemetry & flight metrics aggregated over the past week';
+            subtitleEl.style.color = '#38bdf8';
         }
 
         // 1. Lowest Aircraft

@@ -117,8 +117,8 @@
         <div class="analytics-modal-content">
             <div class="analytics-modal-header">
                 <div>
-                    <h2 style="margin-bottom:2px;">📊 Airspace Intelligence & Analytics</h2>
-                    <span id="analytics-subtitle" style="font-size:11px; color:#e2e8f0; font-weight:600;">⏳ Querying database analytics (this may take a few seconds)...</span>
+                    <h2 style="margin-bottom:4px;">📊 Regional Airspace Analytics</h2>
+                    <span id="analytics-subtitle" style="font-size:12px; color:#38bdf8; font-weight:600;">📅 Airspace telemetry & flight metrics aggregated over the past week</span>
                 </div>
                 <button id="analytics-close-btn">&times;</button>
             </div>
@@ -126,7 +126,7 @@
                 <!-- KPI Grid -->
                 <div class="kpi-grid">
                     <div class="kpi-card">
-                        <span class="kpi-label">Lowest Flight This Week</span>
+                        <span class="kpi-label">Lowest Flight Altitude</span>
                         <div class="kpi-value" id="kpi-lowest-alt">--</div>
                         <span class="kpi-sub" id="kpi-lowest-info">Loading...</span>
                     </div>
@@ -141,14 +141,14 @@
                         <span class="kpi-sub" id="kpi-busiest-count">Loading...</span>
                     </div>
                     <div class="kpi-card">
-                        <span class="kpi-label">Avg Crosswind Drift (Wind Offset)</span>
+                        <span class="kpi-label">Avg Crosswind Drift</span>
                         <div class="kpi-value" id="kpi-avg-drift">--</div>
-                        <span class="kpi-sub">Track vs Nose Heading diff (Past 1h)</span>
+                        <span class="kpi-sub">Previous hour (Track vs Heading)</span>
                     </div>
                     <div class="kpi-card">
-                        <span class="kpi-label">Avg Local Flight Altitude</span>
+                        <span class="kpi-label">Avg Flight Altitude</span>
                         <div class="kpi-value" id="kpi-avg-alt">--</div>
-                        <span class="kpi-sub">Mean altitude over 7 days</span>
+                        <span class="kpi-sub">Mean altitude over past week</span>
                     </div>
                 </div>
 

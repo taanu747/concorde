@@ -836,6 +836,7 @@ body:not(.is-zooming) .leaflet-marker-icon.custom-plane-icon {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    display: block;
 }
 
 /* Section Grids & Panels */
