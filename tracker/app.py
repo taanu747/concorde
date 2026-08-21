@@ -58,9 +58,73 @@ DB_FILE = os.path.join(BASE_DIR, 'aircraftDatabase.csv')
 DB_URL = "https://opensky-network.org/datasets/metadata/aircraftDatabase.csv"
 SQLITE_DB_FILE = os.path.join(BASE_DIR, 'aircraft_history.db')
 
-FEEDER_SECRET = os.environ.get("FEEDER_SECRET", "changeme")
+def clean_aircraft_model_name(model_raw):
+    """Convert technical type certification codes (e.g. ERJ 170-200 LR, CL-600-2D24) to friendly common names (e.g. Embraer E175)."""
+    if not model_raw:
+        return 'Light Aircraft'
+    m = str(model_raw).strip()
+    m_upper = m.upper()
 
+    mappings = [
+        (r'ERJ\s*170-200|E175|EMBRAER\s*175', 'Embraer E175'),
+        (r'ERJ\s*170-100|E170|EMBRAER\s*170', 'Embraer E170'),
+        (r'ERJ\s*190|E190|EMBRAER\s*190', 'Embraer E190'),
+        (r'ERJ\s*195|E195|EMBRAER\s*195', 'Embraer E195'),
+        (r'ERJ\s*145|EMB-145|ERJ-145', 'Embraer ERJ 145'),
+        (r'CL-600-2D24|CRJ-900|CRJ900|CRJ9', 'Bombardier CRJ-900'),
+        (r'CL-600-2C10|CRJ-700|CRJ700|CRJ7', 'Bombardier CRJ-700'),
+        (r'CL-600-2B19|CRJ-200|CRJ200|CRJ2', 'Bombardier CRJ-200'),
+        (r'CL-600-2E25|CRJ-1000|CRJ1000', 'Bombardier CRJ-1000'),
+        (r'BD-100-1A10|CHALLENGER\s*300|CL30', 'Bombardier Challenger 300'),
+        (r'BD-700-1A10|BD-700-1A11|GLOBAL\s*EXPRESS', 'Bombardier Global Express'),
+        (r'A320-232|A320-214|A320-271N|A320|A-320', 'Airbus A320'),
+        (r'A321-231|A321-271NX|A321|A-321', 'Airbus A321'),
+        (r'A319-112|A319-115|A319|A-319', 'Airbus A319'),
+        (r'A318', 'Airbus A318'),
+        (r'A330-243|A330-343|A330-941|A330', 'Airbus A330'),
+        (r'A340', 'Airbus A340'),
+        (r'A350-941|A350-1041|A350', 'Airbus A350'),
+        (r'A380-841|A380', 'Airbus A380'),
+        (r'737-800|737-8|MAX\s*8', 'Boeing 737-800'),
+        (r'737-900|737-9|MAX\s*9', 'Boeing 737-900'),
+        (r'737-700|737-7', 'Boeing 737-700'),
+        (r'737', 'Boeing 737'),
+        (r'777-200|777-236|777-200ER', 'Boeing 777-200'),
+        (r'777-300|777-300ER', 'Boeing 777-300'),
+        (r'777', 'Boeing 777'),
+        (r'787-8', 'Boeing 787-8 Dreamliner'),
+        (r'787-9', 'Boeing 787-9 Dreamliner'),
+        (r'787-10', 'Boeing 787-10 Dreamliner'),
+        (r'787', 'Boeing 787 Dreamliner'),
+        (r'757-232|757-200|757-2', 'Boeing 757-200'),
+        (r'757-330|757-300|757-3', 'Boeing 757-300'),
+        (r'757', 'Boeing 757'),
+        (r'767-332|767-300|767-3', 'Boeing 767-300'),
+        (r'767-400|767-4', 'Boeing 767-400'),
+        (r'767', 'Boeing 767'),
+        (r'747-400|747-4', 'Boeing 747-400'),
+        (r'747-8', 'Boeing 747-8'),
+        (r'747', 'Boeing 747'),
+        (r'172M|172S|172N|172P|C172|SKYHAWK', 'Cessna 172 Skyhawk'),
+        (r'182T|182R|C182|SKYLANE', 'Cessna 182 Skylane'),
+        (r'PA-28|P28A|CHEROKEE|ARCHER', 'Piper PA-28 Archer'),
+        (r'BE20|B200|B350|KING\s*AIR', 'Beechcraft King Air'),
+        (r'PC-12|PC12', 'Pilatus PC-12'),
+        (r'SR22', 'Cirrus SR22'),
+        (r'SF50', 'Cirrus Vision Jet'),
+        (r'GA-7|GA7', 'Grumman Cougar (GA-7)'),
+        (r'E55P|PHENOM\s*300', 'Embraer Phenom 300'),
+        (r'E50P|PHENOM\s*100', 'Embraer Phenom 100'),
+        (r'GLF4|G450|GIV', 'Gulfstream IV / G450'),
+        (r'GLF5|G550|GV', 'Gulfstream V / G550'),
+        (r'GLF6|G650', 'Gulfstream G650')
+    ]
 
+    for pat, friendly_name in mappings:
+        if re.search(pat, m_upper):
+            return friendly_name
+
+    return m
 
 def init_db():
     """Lightweight & instant serverless database initialization (< 5ms startup)."""
@@ -733,7 +797,7 @@ def get_analytics_dashboard():
             except Exception as e:
                 print(f"Analytics top_airlines query error: {e}")
 
-            # 6. Top 5 Aircraft Models
+            # 6. Top 5 Aircraft Models (Mapped to common friendly names)
             top_models = []
             try:
                 if DB_TYPE == "postgres":
@@ -743,7 +807,7 @@ def get_analytics_dashboard():
                         WHERE model IS NOT NULL AND model != '' AND timestamp >= NOW() - INTERVAL '14 days'
                         GROUP BY 1
                         ORDER BY flight_count DESC
-                        LIMIT 5
+                        LIMIT 30
                     '''
                 else:
                     q_top_models = '''
@@ -752,12 +816,30 @@ def get_analytics_dashboard():
                         WHERE model IS NOT NULL AND model != '' AND timestamp >= ?
                         GROUP BY 1
                         ORDER BY flight_count DESC
-                        LIMIT 5
+                        LIMIT 30
                     '''
-                top_models = execute_query(conn, q_top_models) if DB_TYPE == "postgres" else execute_query(conn, q_top_models, (cutoff_14d,))
-                top_models = top_models or []
+                raw_models = execute_query(conn, q_top_models) if DB_TYPE == "postgres" else execute_query(conn, q_top_models, (cutoff_14d,))
+                if raw_models:
+                    model_counts = {}
+                    for item in raw_models:
+                        c_name = clean_aircraft_model_name(item['name'])
+                        count = int(item['flight_count'])
+                        model_counts[c_name] = model_counts.get(c_name, 0) + count
+                    
+                    sorted_models = sorted(model_counts.items(), key=lambda x: x[1], reverse=True)[:5]
+                    top_models = [{"name": name, "flight_count": count} for name, count in sorted_models]
             except Exception as e:
                 print(f"Analytics top_models query error: {e}")
+
+            # Clean up model names for lowest, fastest, and military flights
+            if lowest and lowest.get('model'):
+                lowest['model'] = clean_aircraft_model_name(lowest['model'])
+            if fastest and fastest.get('model'):
+                fastest['model'] = clean_aircraft_model_name(fastest['model'])
+            if military_flights:
+                for mf in military_flights:
+                    if mf.get('model'):
+                        mf['model'] = clean_aircraft_model_name(mf['model'])
 
             # 7. Recent Military Aircraft
             military_flights = []
@@ -891,7 +973,7 @@ def ai_copilot_query():
                 spd = safe_round(aircraft_state.get('gs') if aircraft_state.get('gs') is not None else aircraft_state.get('speed'))
                 track = aircraft_state.get('track')
                 heading = aircraft_state.get('mag_heading') if aircraft_state.get('mag_heading') is not None else aircraft_state.get('heading')
-                model = aircraft_state.get('model') or aircraft_state.get('typecode') or 'Aircraft'
+                model = clean_aircraft_model_name(aircraft_state.get('model') or aircraft_state.get('typecode'))
                 operator = aircraft_state.get('operator') or 'Flight'
                 squawk = str(aircraft_state.get('squawk', ''))
                 
