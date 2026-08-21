@@ -27,20 +27,26 @@ def get_db_connection():
         return conn
 
 def execute_query(conn, query, params=(), commit=False):
-    if DB_TYPE == "postgres":
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        # Postgres uses %s instead of ?
-        query = query.replace("?", "%s")
-    else:
-        cursor = conn.cursor()
+    try:
+        if DB_TYPE == "postgres":
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            # Postgres uses %s instead of ?
+            query = query.replace("?", "%s")
+        else:
+            cursor = conn.cursor()
+            
+        cursor.execute(query, params)
+        if commit:
+            conn.commit()
         
-    cursor.execute(query, params)
-    if commit:
-        conn.commit()
-    
-    if query.strip().upper().startswith("SELECT") or query.strip().upper().startswith("WITH"):
-        return [dict(row) for row in cursor.fetchall()]
-    return None
+        if query.strip().upper().startswith("SELECT") or query.strip().upper().startswith("WITH"):
+            return [dict(row) for row in cursor.fetchall()]
+        return None
+    except Exception as e:
+        if DB_TYPE == "postgres" and conn:
+            try: conn.rollback()
+            except Exception: pass
+        raise e
 
 app = Flask(__name__)
 
@@ -572,7 +578,6 @@ def get_analytics_dashboard():
     """Return aggregated stats for the local analytics dashboard with indexed fast batch queries."""
     try:
         with get_db_connection() as conn:
-            ensure_db_indexes(conn)
             cutoff_14d = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time() - 14 * 86400))
             
             # 1. Lowest aircraft flown
@@ -747,23 +752,22 @@ def get_analytics_dashboard():
             except Exception as e:
                 print(f"Analytics top_models query error: {e}")
 
-            # 7. Recent Military Aircraft (Fast Indexed Scan)
+            # 7. Recent Military Aircraft
             military_flights = []
             try:
                 if DB_TYPE == "postgres":
                     q_military = '''
-                        SELECT DISTINCT ON (hex) hex, callsign, altitude, speed, model, operator, timestamp
+                        SELECT hex, callsign, altitude, speed, model, operator, timestamp
                         FROM aircraft_history
                         WHERE is_military = 1 AND timestamp >= NOW() - INTERVAL '14 days' AND (callsign IS NULL OR (callsign NOT LIKE 'AFR%' AND callsign NOT LIKE 'AFL%' AND callsign NOT LIKE 'AFE%'))
-                        ORDER BY hex, timestamp DESC
+                        ORDER BY timestamp DESC
                         LIMIT 5
                     '''
                 else:
                     q_military = '''
-                        SELECT hex, callsign, altitude, speed, model, operator, MAX(timestamp) as timestamp
+                        SELECT hex, callsign, altitude, speed, model, operator, timestamp
                         FROM aircraft_history
                         WHERE is_military = 1 AND timestamp >= ? AND (callsign IS NULL OR (callsign NOT LIKE 'AFR%' AND callsign NOT LIKE 'AFL%' AND callsign NOT LIKE 'AFE%'))
-                        GROUP BY hex
                         ORDER BY timestamp DESC
                         LIMIT 5
                     '''
