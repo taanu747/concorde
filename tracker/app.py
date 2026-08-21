@@ -649,7 +649,7 @@ def get_analytics_dashboard():
             
     try:
         with get_db_connection() as conn:
-            cutoff_14d = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time() - 14 * 86400))
+            cutoff_7d = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time() - 7 * 86400))
             
             # 1. Lowest aircraft flown
             lowest = None
@@ -658,7 +658,7 @@ def get_analytics_dashboard():
                     q_lowest = '''
                         SELECT hex, callsign, altitude, speed, model, operator, timestamp
                         FROM aircraft_history
-                        WHERE altitude IS NOT NULL AND altitude > 0 AND timestamp >= NOW() - INTERVAL '14 days'
+                        WHERE altitude IS NOT NULL AND altitude > 0 AND timestamp >= NOW() - INTERVAL '7 days'
                         ORDER BY altitude ASC
                         LIMIT 1
                     '''
@@ -670,7 +670,7 @@ def get_analytics_dashboard():
                         ORDER BY altitude ASC
                         LIMIT 1
                     '''
-                res_lowest = execute_query(conn, q_lowest) if DB_TYPE == "postgres" else execute_query(conn, q_lowest, (cutoff_14d,))
+                res_lowest = execute_query(conn, q_lowest) if DB_TYPE == "postgres" else execute_query(conn, q_lowest, (cutoff_7d,))
                 if res_lowest:
                     lowest = res_lowest[0]
                 else:
@@ -693,7 +693,7 @@ def get_analytics_dashboard():
                     q_fastest = '''
                         SELECT hex, callsign, altitude, speed, model, operator, timestamp
                         FROM aircraft_history
-                        WHERE speed IS NOT NULL AND speed > 0 AND timestamp >= NOW() - INTERVAL '14 days'
+                        WHERE speed IS NOT NULL AND speed > 0 AND timestamp >= NOW() - INTERVAL '7 days'
                         ORDER BY speed DESC
                         LIMIT 1
                     '''
@@ -705,7 +705,7 @@ def get_analytics_dashboard():
                         ORDER BY speed DESC
                         LIMIT 1
                     '''
-                res_fastest = execute_query(conn, q_fastest) if DB_TYPE == "postgres" else execute_query(conn, q_fastest, (cutoff_14d,))
+                res_fastest = execute_query(conn, q_fastest) if DB_TYPE == "postgres" else execute_query(conn, q_fastest, (cutoff_7d,))
                 if res_fastest:
                     fastest = res_fastest[0]
                 else:
@@ -728,7 +728,7 @@ def get_analytics_dashboard():
                     q_busiest = '''
                         SELECT EXTRACT(HOUR FROM timestamp)::text as hour_utc, COUNT(DISTINCT hex) as flight_count
                         FROM aircraft_history
-                        WHERE timestamp >= NOW() - INTERVAL '14 days'
+                        WHERE timestamp >= NOW() - INTERVAL '7 days'
                         GROUP BY EXTRACT(HOUR FROM timestamp)
                         ORDER BY flight_count DESC
                         LIMIT 1
@@ -742,7 +742,7 @@ def get_analytics_dashboard():
                         ORDER BY flight_count DESC
                         LIMIT 1
                     '''
-                res_busiest = execute_query(conn, q_busiest) if DB_TYPE == "postgres" else execute_query(conn, q_busiest, (cutoff_14d,))
+                res_busiest = execute_query(conn, q_busiest) if DB_TYPE == "postgres" else execute_query(conn, q_busiest, (cutoff_7d,))
                 if res_busiest:
                     busiest = res_busiest[0]
                 else:
@@ -777,7 +777,7 @@ def get_analytics_dashboard():
                             AVG(CASE WHEN track_diff > 0 THEN track_diff END) as avg_drift,
                             AVG(CASE WHEN altitude > 0 THEN altitude END) as avg_alt
                         FROM aircraft_history
-                        WHERE timestamp >= NOW() - INTERVAL '14 days'
+                        WHERE timestamp >= NOW() - INTERVAL '7 days'
                     '''
                     res_stats = execute_query(conn, q_stats)
                 else:
@@ -788,7 +788,7 @@ def get_analytics_dashboard():
                         FROM aircraft_history
                         WHERE timestamp >= ?
                     '''
-                    res_stats = execute_query(conn, q_stats, (cutoff_14d,))
+                    res_stats = execute_query(conn, q_stats, (cutoff_7d,))
                 
                 if res_stats and res_stats[0] and (res_stats[0]['avg_drift'] or res_stats[0]['avg_alt']):
                     if res_stats[0]['avg_drift'] is not None and float(res_stats[0]['avg_drift']) > 0:
@@ -833,7 +833,7 @@ def get_analytics_dashboard():
                     q_top_airlines = '''
                         SELECT COALESCE(NULLIF(operator, ''), 'General Aviation / Private') as name, COUNT(DISTINCT hex) as flight_count
                         FROM aircraft_history
-                        WHERE operator IS NOT NULL AND operator != '' AND timestamp >= NOW() - INTERVAL '14 days'
+                        WHERE operator IS NOT NULL AND operator != '' AND timestamp >= NOW() - INTERVAL '7 days'
                         GROUP BY 1
                         ORDER BY flight_count DESC
                         LIMIT 5
@@ -847,7 +847,7 @@ def get_analytics_dashboard():
                         ORDER BY flight_count DESC
                         LIMIT 5
                     '''
-                top_airlines = execute_query(conn, q_top_airlines) if DB_TYPE == "postgres" else execute_query(conn, q_top_airlines, (cutoff_14d,))
+                top_airlines = execute_query(conn, q_top_airlines) if DB_TYPE == "postgres" else execute_query(conn, q_top_airlines, (cutoff_7d,))
                 if not top_airlines:
                     q_top_airlines_fb = '''
                         SELECT COALESCE(NULLIF(operator, ''), 'General Aviation / Private') as name, COUNT(DISTINCT hex) as flight_count
@@ -868,7 +868,7 @@ def get_analytics_dashboard():
                     q_top_models = '''
                         SELECT COALESCE(NULLIF(model, ''), 'Light Aircraft') as name, COUNT(DISTINCT hex) as flight_count
                         FROM aircraft_history
-                        WHERE model IS NOT NULL AND model != '' AND timestamp >= NOW() - INTERVAL '14 days'
+                        WHERE model IS NOT NULL AND model != '' AND timestamp >= NOW() - INTERVAL '7 days'
                         GROUP BY 1
                         ORDER BY flight_count DESC
                         LIMIT 30
@@ -882,7 +882,7 @@ def get_analytics_dashboard():
                         ORDER BY flight_count DESC
                         LIMIT 30
                     '''
-                raw_models = execute_query(conn, q_top_models) if DB_TYPE == "postgres" else execute_query(conn, q_top_models, (cutoff_14d,))
+                raw_models = execute_query(conn, q_top_models) if DB_TYPE == "postgres" else execute_query(conn, q_top_models, (cutoff_7d,))
                 if not raw_models:
                     q_top_models_fb = '''
                         SELECT COALESCE(NULLIF(model, ''), 'Light Aircraft') as name, COUNT(DISTINCT hex) as flight_count
@@ -913,7 +913,7 @@ def get_analytics_dashboard():
                     q_military = '''
                         SELECT hex, callsign, altitude, speed, model, operator, timestamp
                         FROM aircraft_history
-                        WHERE is_military = 1 AND timestamp >= NOW() - INTERVAL '14 days' AND (callsign IS NULL OR (callsign NOT LIKE 'AFR%' AND callsign NOT LIKE 'AFL%' AND callsign NOT LIKE 'AFE%'))
+                        WHERE is_military = 1 AND timestamp >= NOW() - INTERVAL '7 days' AND (callsign IS NULL OR (callsign NOT LIKE 'AFR%' AND callsign NOT LIKE 'AFL%' AND callsign NOT LIKE 'AFE%'))
                         ORDER BY timestamp DESC
                         LIMIT 5
                     '''
@@ -925,7 +925,7 @@ def get_analytics_dashboard():
                         ORDER BY timestamp DESC
                         LIMIT 5
                     '''
-                military_flights = execute_query(conn, q_military) if DB_TYPE == "postgres" else execute_query(conn, q_military, (cutoff_14d,))
+                military_flights = execute_query(conn, q_military) if DB_TYPE == "postgres" else execute_query(conn, q_military, (cutoff_7d,))
                 if not military_flights:
                     q_military_fb = '''
                         SELECT hex, callsign, altitude, speed, model, operator, timestamp
