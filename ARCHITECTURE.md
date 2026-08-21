@@ -165,6 +165,14 @@ concorde/
 - `is_military`: Flag (1 = Military / Special operation, 0 = Commercial / GA)
 - `timestamp`: UTC observation timestamp
 
+### Database Performance Indexes (`ensure_db_indexes`)
+- `idx_timestamp`: `CREATE INDEX idx_timestamp ON aircraft_history(timestamp DESC)` (Rapid date-window scans)
+- `idx_altitude`: `CREATE INDEX idx_altitude ON aircraft_history(altitude)` (Instant lowest flight queries)
+- `idx_speed`: `CREATE INDEX idx_speed ON aircraft_history(speed DESC)` (Instant fastest speed queries)
+- `idx_is_military`: `CREATE INDEX idx_is_military ON aircraft_history(is_military, timestamp DESC)` (Fast military flight scans)
+- `idx_operator` / `idx_model`: Indexed grouping for top airlines and aircraft model rankings.
+- `idx_hex` / `idx_callsign`: High-speed flight search & history lookup index.
+
 ---
 
 ## 7. Operational & Deployment Guide
