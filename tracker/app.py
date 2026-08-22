@@ -526,48 +526,6 @@ def get_heatmap_data():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/analytics/weather-deviations')
-def get_weather_deviations():
-    try:
-        with get_db_connection() as conn:
-            cutoff = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time() - 3 * 3600))
-            if DB_TYPE == "postgres":
-                query_sql = '''
-                    WITH changes AS (
-                        SELECT hex, callsign, lat, lon, heading, altitude, timestamp,
-                               ABS(heading - LAG(heading) OVER (PARTITION BY hex ORDER BY timestamp)) as hc,
-                               ABS(altitude - LAG(altitude) OVER (PARTITION BY hex ORDER BY timestamp)) as ac,
-                               EXTRACT(EPOCH FROM (timestamp - LAG(timestamp) OVER (PARTITION BY hex ORDER BY timestamp))) as gap_sec
-                        FROM aircraft_history
-                        WHERE timestamp >= %s
-                    )
-                    SELECT hex, callsign, lat, lon, hc, ac, timestamp
-                    FROM changes
-                    WHERE ((hc > 15 AND hc < 345) OR (ac > 1000)) AND (gap_sec IS NULL OR gap_sec <= 3600)
-                    ORDER BY timestamp DESC
-                    LIMIT 500
-                '''
-            else:
-                query_sql = '''
-                    WITH changes AS (
-                        SELECT hex, callsign, lat, lon, heading, altitude, timestamp,
-                               ABS(heading - LAG(heading) OVER (PARTITION BY hex ORDER BY timestamp)) as hc,
-                               ABS(altitude - LAG(altitude) OVER (PARTITION BY hex ORDER BY timestamp)) as ac,
-                               (strftime('%s', timestamp) - strftime('%s', LAG(timestamp) OVER (PARTITION BY hex ORDER BY timestamp))) as gap_sec
-                        FROM aircraft_history
-                        WHERE timestamp >= ?
-                    )
-                    SELECT hex, callsign, lat, lon, hc, ac, timestamp
-                    FROM changes
-                    WHERE ((hc > 15 AND hc < 345) OR (ac > 1000)) AND (gap_sec IS NULL OR gap_sec <= 3600)
-                    ORDER BY timestamp DESC
-                    LIMIT 500
-                '''
-            results = execute_query(conn, query_sql, (cutoff,))
-            return jsonify(results)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
 @app.route('/api/historical-data')
 def get_historical_aircraft_data():
     """Return historical aircraft data from a specific UTC timestamp."""
