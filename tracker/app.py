@@ -23,7 +23,7 @@ def get_db_connection():
     if DB_TYPE == "postgres":
         return psycopg2.connect(DATABASE_URL)
     else:
-        conn = sqlite3.connect(SQLITE_DB_FILE, timeout=30.0)
+        conn = sqlite3.connect(SQLITE_DB_FILE)
         conn.row_factory = sqlite3.Row
         return conn
 
