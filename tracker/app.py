@@ -62,6 +62,10 @@ DB_FILE = os.path.join(BASE_DIR, 'aircraftDatabase.csv')
 DB_URL = "https://opensky-network.org/datasets/metadata/aircraftDatabase.csv"
 SQLITE_DB_FILE = os.path.join(BASE_DIR, 'aircraft_history.db')
 
+# In-memory store for sampling historical data insertions
+_last_history_save = {}
+_history_lock = threading.Lock()
+
 def clean_aircraft_model_name(model_raw):
     """Convert technical type certification codes (e.g. ERJ 170-200 LR, CL-600-2D24) to friendly common names (e.g. Embraer E175)."""
     if not model_raw:
@@ -382,6 +386,15 @@ def update_aircraft_data():
                 seen = plane.get('seen', 0)
                 if seen < 15:
                     hex_code = plane.get('hex', '').lower()
+                    
+                    # 60-second sampling: Only insert to history once per minute per aircraft
+                    now = time.time()
+                    with _history_lock:
+                        last_save = _last_history_save.get(hex_code, 0)
+                        if now - last_save < 60:
+                            continue
+                        _last_history_save[hex_code] = now
+
                     callsign = plane.get('flight', '').strip()
                     lat = plane.get('lat')
                     lon = plane.get('lon')
@@ -422,6 +435,13 @@ def update_aircraft_data():
                 del_query = "DELETE FROM aircraft_history WHERE timestamp <= ?"
                 if DB_TYPE == "postgres": del_query = del_query.replace("?", "%s")
                 cursor.execute(del_query, (cutoff,))
+                
+                # Cleanup memory cache for planes that left the area
+                now = time.time()
+                with _history_lock:
+                    stale_hexes = [h for h, t in _last_history_save.items() if now - t > 3600]
+                    for h in stale_hexes:
+                        del _last_history_save[h]
             
             if conn and DB_TYPE != "postgres":
                 conn.commit()
