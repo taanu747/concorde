@@ -227,6 +227,7 @@ def create_indexes_background():
             with get_db_connection() as conn:
                 cursor = conn.cursor()
                 indexes = [
+                    # Single-column basic lookups
                     'CREATE INDEX IF NOT EXISTS idx_hex ON aircraft_history(hex)',
                     'CREATE INDEX IF NOT EXISTS idx_callsign ON aircraft_history(callsign)',
                     'CREATE INDEX IF NOT EXISTS idx_timestamp ON aircraft_history(timestamp DESC)',
@@ -235,7 +236,19 @@ def create_indexes_background():
                     'CREATE INDEX IF NOT EXISTS idx_is_military ON aircraft_history(is_military, timestamp DESC)',
                     'CREATE INDEX IF NOT EXISTS idx_operator ON aircraft_history(operator)',
                     'CREATE INDEX IF NOT EXISTS idx_model ON aircraft_history(model)',
-                    'CREATE INDEX IF NOT EXISTS idx_track_diff ON aircraft_history(track_diff)'
+                    'CREATE INDEX IF NOT EXISTS idx_track_diff ON aircraft_history(track_diff)',
+
+                    # Composite indexes: optimize 7-day timestamp range filtering combined with sorting/grouping
+                    # 1. idx_hex_ts: Eliminates in-memory filesort when plotting flight path trajectories for a plane
+                    'CREATE INDEX IF NOT EXISTS idx_hex_ts ON aircraft_history(hex, timestamp ASC)',
+                    # 2. idx_ts_alt: Accelerates 7-day lowest altitude queries
+                    'CREATE INDEX IF NOT EXISTS idx_ts_alt ON aircraft_history(timestamp DESC, altitude ASC)',
+                    # 3. idx_ts_speed: Accelerates 7-day fastest speed queries
+                    'CREATE INDEX IF NOT EXISTS idx_ts_speed ON aircraft_history(timestamp DESC, speed DESC)',
+                    # 4. idx_ts_operator: Accelerates 7-day top airline aggregations
+                    'CREATE INDEX IF NOT EXISTS idx_ts_operator ON aircraft_history(timestamp DESC, operator)',
+                    # 5. idx_ts_model: Accelerates 7-day top aircraft model aggregations
+                    'CREATE INDEX IF NOT EXISTS idx_ts_model ON aircraft_history(timestamp DESC, model)'
                 ]
                 for idx in indexes:
                     try:
@@ -251,6 +264,14 @@ def create_indexes_background():
 # AviationStack API Configuration 
 AVIATIONSTACK_API_KEY = "f6f24b7474f05dbbfe61a7fefcd0fef4"
 flight_route_cache = {}
+
+# In-memory short-lived cache (60s TTL) for heavy 7-day analytics and heatmap responses
+# Reduces database load to < 1ms for concurrent users viewing analytics/heatmap
+_analytics_overview_cache = None
+_analytics_overview_cache_time = 0
+_heatmap_cache = None
+_heatmap_cache_time = 0
+_analytics_cache_lock = threading.Lock()
 
 @app.route('/api/route/<flight_iata>')
 def get_flight_route(flight_iata):
@@ -510,18 +531,37 @@ def get_aircraft_history():
 
 @app.route('/api/analytics/heatmap')
 def get_heatmap_data():
+    global _heatmap_cache, _heatmap_cache_time
+    now = time.time()
+    with _analytics_cache_lock:
+        if _heatmap_cache is not None and (now - _heatmap_cache_time) < 60:
+            return jsonify(_heatmap_cache)
+
     try:
         with get_db_connection() as conn:
             cutoff = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time() - 7 * 86400))
-            query_sql = '''
-                SELECT ROUND(CAST(lat AS NUMERIC), 2) as r_lat, ROUND(CAST(lon AS NUMERIC), 2) as r_lon, COUNT(*) as intensity 
-                FROM aircraft_history 
-                WHERE timestamp >= ?
-                GROUP BY ROUND(CAST(lat AS NUMERIC), 2), ROUND(CAST(lon AS NUMERIC), 2)
-            '''
-            raw_results = execute_query(conn, query_sql, (cutoff,))
+            if DB_TYPE == "postgres":
+                query_sql = '''
+                    SELECT ROUND(CAST(lat AS NUMERIC), 2) as r_lat, ROUND(CAST(lon AS NUMERIC), 2) as r_lon, COUNT(*) as intensity 
+                    FROM aircraft_history 
+                    WHERE timestamp >= NOW() - INTERVAL '7 days'
+                    GROUP BY 1, 2
+                '''
+                raw_results = execute_query(conn, query_sql)
+            else:
+                query_sql = '''
+                    SELECT ROUND(CAST(lat AS NUMERIC), 2) as r_lat, ROUND(CAST(lon AS NUMERIC), 2) as r_lon, COUNT(*) as intensity 
+                    FROM aircraft_history 
+                    WHERE timestamp >= ?
+                    GROUP BY 1, 2
+                '''
+                raw_results = execute_query(conn, query_sql, (cutoff,))
+
             # Format as [lat, lon, intensity] array for leaflet.heat
             results = [[row['r_lat'], row['r_lon'], row['intensity']] for row in raw_results]
+            with _analytics_cache_lock:
+                _heatmap_cache = results
+                _heatmap_cache_time = now
             return jsonify(results)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -599,6 +639,12 @@ def get_historical_aircraft_data():
 @app.route('/api/analytics/dashboard')
 def get_analytics_dashboard():
     """Return aggregated stats for the local analytics dashboard with indexed fast batch queries and fallback handlers."""
+    global _analytics_overview_cache, _analytics_overview_cache_time
+    now = time.time()
+    with _analytics_cache_lock:
+        if _analytics_overview_cache is not None and (now - _analytics_overview_cache_time) < 60:
+            return jsonify(_analytics_overview_cache)
+
     if not db_indexes_created:
         try:
             threading.Thread(target=create_indexes_background, daemon=True).start()
@@ -906,7 +952,7 @@ def get_analytics_dashboard():
                     if mf.get('model'):
                         mf['model'] = clean_aircraft_model_name(mf['model'])
 
-            return jsonify({
+            res_payload = {
                 "lowest": lowest,
                 "fastest": fastest,
                 "busiest": busiest,
@@ -915,7 +961,12 @@ def get_analytics_dashboard():
                 "top_airlines": top_airlines,
                 "top_models": top_models,
                 "military_flights": military_flights
-            })
+            }
+            with _analytics_cache_lock:
+                _analytics_overview_cache = res_payload
+                _analytics_overview_cache_time = now
+
+            return jsonify(res_payload)
     except Exception as e:
         print(f"Error compiling analytics dashboard: {e}")
         return jsonify({"error": str(e)}), 500
