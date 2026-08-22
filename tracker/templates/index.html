@@ -77,7 +77,9 @@
                 <input type="checkbox" id="wind-toggle"> Wind Streamlines (Open-Meteo)
             </label>
             <label for="heatmap-toggle" class="dropdown-item">
-                <input type="checkbox" id="heatmap-toggle"> Heatmap (7d)
+                <input type="checkbox" id="heatmap-toggle">
+                <span>Heatmap (7d)</span>
+                <span id="heatmap-spinner" class="heatmap-inline-spinner" style="display: none;"></span>
             </label>
             <label for="deviations-toggle" class="dropdown-item">
                 <input type="checkbox" id="deviations-toggle"> Deviations (3h)
@@ -102,6 +104,12 @@
                 <input type="checkbox" id="ifr-high-toggle"> IFR High Airways
             </label>
         </div>
+    </div>
+
+    <!-- Heatmap Loading Badge Overlay -->
+    <div id="heatmap-loading-badge" class="heatmap-badge" style="display: none;">
+        <span class="spinner-ring"></span>
+        <span>Loading 7-Day Heatmap...</span>
     </div>
 
     <!-- Map Container -->

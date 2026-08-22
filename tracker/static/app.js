@@ -995,7 +995,14 @@ const getDynamicHeatmapOptions = (zoom) => {
 };
 
 document.getElementById('heatmap-toggle').addEventListener('change', async (e) => {
+    const spinner = document.getElementById('heatmap-spinner');
+    const badge = document.getElementById('heatmap-loading-badge');
+
     if (e.target.checked) {
+        if (spinner) spinner.style.display = 'inline-block';
+        if (badge) badge.style.display = 'flex';
+        e.target.disabled = true;
+
         try {
             const res = await fetch('/api/analytics/heatmap');
             const data = await res.json();
@@ -1016,6 +1023,11 @@ document.getElementById('heatmap-toggle').addEventListener('change', async (e) =
             }).addTo(map);
         } catch (err) {
             console.error("Failed to load heatmap", err);
+            e.target.checked = false;
+        } finally {
+            if (spinner) spinner.style.display = 'none';
+            if (badge) badge.style.display = 'none';
+            e.target.disabled = false;
         }
     } else {
         if (heatmapLayer) {
