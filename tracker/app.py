@@ -7,6 +7,7 @@ import shutil
 import sqlite3
 import threading
 import re
+import random
 from flask import Flask, jsonify, render_template, request
 
 # Database Configuration
@@ -22,7 +23,7 @@ def get_db_connection():
     if DB_TYPE == "postgres":
         return psycopg2.connect(DATABASE_URL)
     else:
-        conn = sqlite3.connect(SQLITE_DB_FILE)
+        conn = sqlite3.connect(SQLITE_DB_FILE, timeout=30.0)
         conn.row_factory = sqlite3.Row
         return conn
 
@@ -49,6 +50,7 @@ def execute_query(conn, query, params=(), commit=False):
         raise e
 
 app = Flask(__name__)
+FEEDER_SECRET = os.environ.get("FEEDER_SECRET", "changeme")
 
 # The path to the aircraft.json file that dump1090 creates.
 # Make sure to run dump1090 in the same directory, or update this path!
@@ -406,16 +408,15 @@ def update_aircraft_data():
                         if lat is not None and lon is not None:
                             cursor.execute(hist_query, (hex_code, callsign, lat, lon, altitude, heading, speed, track, track_diff, operator, model, is_mili))
                 
-                # Cleanup old data (> 7 days)
-                cutoff = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time() - 7 * 86400))
-                del_query = "DELETE FROM aircraft_history WHERE timestamp <= ?"
-                if DB_TYPE == "postgres": del_query = del_query.replace("?", "%s")
-                cursor.execute(del_query, (cutoff,))
+                # Cleanup old data (> 7 days) periodically (1% of requests) to prevent DB lock contention
+                if random.random() < 0.01:
+                    cutoff = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time() - 7 * 86400))
+                    del_query = "DELETE FROM aircraft_history WHERE timestamp <= ?"
+                    if DB_TYPE == "postgres": del_query = del_query.replace("?", "%s")
+                    cursor.execute(del_query, (cutoff,))
                 conn.commit()
     except Exception as e:
         print(f"Error saving to DB: {e}")
-
-    return jsonify({"status": "success", "aircraft_count": len(request.json.get('aircraft', []))})
 
     return jsonify({"status": "success", "aircraft_count": len(request.json.get('aircraft', []))})
 
