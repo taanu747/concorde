@@ -27,9 +27,12 @@
             </h1>
         </div>
         <div id="header-right">
-            <button id="ai-copilot-btn" class="header-action-btn highlight-ai-btn">🤖 <span class="ai-btn-text">AI Co-Pilot</span></button>
-            <button id="mobile-search-btn" class="header-action-btn mobile-only-btn" title="Search flights">🔍 Search</button>
-            <button id="analytics-btn" class="header-action-btn">📊 <span class="analytics-btn-text">Analytics</span></button>
+            <button id="ai-copilot-btn" class="header-action-btn highlight-ai-btn">🤖 <span class="ai-btn-text">AI
+                    Co-Pilot</span></button>
+            <button id="mobile-search-btn" class="header-action-btn mobile-only-btn" title="Search flights">🔍
+                Search</button>
+            <button id="analytics-btn" class="header-action-btn">📊 <span
+                    class="analytics-btn-text">Analytics</span></button>
             <div id="status-indicator">
                 <span id="aircraft-count">0 Aircraft</span>
                 <span class="dot live"></span> <span class="live-text">Live Data</span>
@@ -64,7 +67,7 @@
         <button id="layers-toggle-btn" class="layers-btn">
             ⚙️ Map Layers
         </button>
-        
+
         <div id="layers-dropdown-menu" class="dropdown-hidden">
             <div class="dropdown-section-title">Map Overlays</div>
             <label for="weather-toggle" class="dropdown-item">
@@ -107,7 +110,7 @@
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-    
+
     <!-- Leaflet.heat plugin -->
     <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 
@@ -118,7 +121,8 @@
             <div class="analytics-modal-header">
                 <div>
                     <h2 style="margin-bottom:4px;">📊 Regional Airspace Analytics</h2>
-                    <span id="analytics-subtitle" style="font-size:12px; color:#38bdf8; font-weight:600;">📅 Airspace telemetry & flight metrics aggregated over the past week</span>
+                    <span id="analytics-subtitle" style="font-size:12px; color:#38bdf8; font-weight:600;">📅 Airspace
+                        telemetry & flight metrics</span>
                 </div>
                 <button id="analytics-close-btn">&times;</button>
             </div>
@@ -126,17 +130,17 @@
                 <!-- KPI Grid -->
                 <div class="kpi-grid">
                     <div class="kpi-card">
-                        <span class="kpi-label">Lowest Flight Altitude</span>
+                        <span class="kpi-label">Lowest Flight This Week</span>
                         <div class="kpi-value" id="kpi-lowest-alt">--</div>
                         <span class="kpi-sub" id="kpi-lowest-info">Loading...</span>
                     </div>
                     <div class="kpi-card">
-                        <span class="kpi-label">Fastest Speed Recorded</span>
+                        <span class="kpi-label">Fastest Speed This Week</span>
                         <div class="kpi-value" id="kpi-fastest-spd">--</div>
                         <span class="kpi-sub" id="kpi-fastest-info">Loading...</span>
                     </div>
                     <div class="kpi-card">
-                        <span class="kpi-label">Busiest Flight Hour</span>
+                        <span class="kpi-label">Busiest Flight Hour This Week</span>
                         <div class="kpi-value" id="kpi-busiest-hour">--</div>
                         <span class="kpi-sub" id="kpi-busiest-count">Loading...</span>
                     </div>
@@ -191,7 +195,8 @@
                 <div class="chat-msg ai-msg">
                     <div class="msg-header">🤖 AI Co-Pilot</div>
                     <div class="msg-content">
-                        Welcome! I analyze live ADS-B flight telemetry, atmospheric wind, and historical airspace data to explain <b>why</b> flights are performing maneuvers or answer questions about your airspace.
+                        Welcome! I analyze live ADS-B flight telemetry, atmospheric wind, and historical airspace data
+                        to explain <b>why</b> flights are performing maneuvers or answer questions about your airspace.
                     </div>
                 </div>
             </div>
@@ -200,21 +205,30 @@
             <div class="prompt-pills-container">
                 <span class="prompt-pills-label">Quick Questions:</span>
                 <div id="ai-prompt-pills">
-                    <button class="prompt-pill" data-prompt="Why is the selected plane climbing/descending?">✈️ Explain Selected Flight</button>
-                    <button class="prompt-pill" data-prompt="Why are small turboprops turning so much?">🔄 Turboprop Turns</button>
-                    <button class="prompt-pill" data-prompt="How does weather and wind affect flight paths?">🌧️ Weather & Wind Impact</button>
-                    <button class="prompt-pill" data-prompt="Why are some planes cruising lower than others?">📊 Altitude Differences</button>
-                    <button class="prompt-pill" data-prompt="What was the lowest flight recorded this week?">📉 Lowest Flight</button>
-                    <button class="prompt-pill" data-prompt="Show me recent military or special aircraft">🎖️ Military Aircraft</button>
-                    <button class="prompt-pill" data-prompt="What is the average crosswind drift right now?">💨 Crosswind Drift</button>
-                    <button class="prompt-pill" data-prompt="List the 5 fastest planes in the area">🚀 Fastest Speed</button>
+                    <button class="prompt-pill" data-prompt="Why is the selected plane climbing/descending?">✈️ Explain
+                        Selected Flight</button>
+                    <button class="prompt-pill" data-prompt="Why are small turboprops turning so much?">🔄 Turboprop
+                        Turns</button>
+                    <button class="prompt-pill" data-prompt="How does weather and wind affect flight paths?">🌧️ Weather
+                        & Wind Impact</button>
+                    <button class="prompt-pill" data-prompt="Why are some planes cruising lower than others?">📊
+                        Altitude Differences</button>
+                    <button class="prompt-pill" data-prompt="What was the lowest flight recorded this week?">📉 Lowest
+                        Flight</button>
+                    <button class="prompt-pill" data-prompt="Show me recent military or special aircraft">🎖️ Military
+                        Aircraft</button>
+                    <button class="prompt-pill" data-prompt="What is the average crosswind drift right now?">💨
+                        Crosswind Drift</button>
+                    <button class="prompt-pill" data-prompt="List the 5 fastest planes in the area">🚀 Fastest
+                        Speed</button>
                 </div>
             </div>
         </div>
 
         <div class="ai-sidebar-footer">
             <div id="ai-chat-input-container">
-                <input type="text" id="ai-chat-input" placeholder="Ask why a plane is turning, lowest flight, etc..." autocomplete="off">
+                <input type="text" id="ai-chat-input" placeholder="Ask why a plane is turning, lowest flight, etc..."
+                    autocomplete="off">
                 <button id="ai-chat-send-btn">Ask AI</button>
             </div>
         </div>
