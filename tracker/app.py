@@ -267,7 +267,7 @@ def create_indexes_background():
 AVIATIONSTACK_API_KEY = "f6f24b7474f05dbbfe61a7fefcd0fef4"
 flight_route_cache = {}
 
-# In-memory short-lived cache (60s TTL) for heavy 7-day analytics and heatmap responses
+# In-memory short-lived cache (30-min TTL / 1800s) for heavy 7-day analytics and heatmap responses
 # Reduces database load to < 1ms for concurrent users viewing analytics/heatmap
 _analytics_overview_cache = None
 _analytics_overview_cache_time = 0
@@ -535,7 +535,7 @@ def get_heatmap_data():
     global _heatmap_cache, _heatmap_cache_time
     now = time.time()
     with _analytics_cache_lock:
-        if _heatmap_cache is not None and (now - _heatmap_cache_time) < 60:
+        if _heatmap_cache is not None and (now - _heatmap_cache_time) < 1800:
             return jsonify(_heatmap_cache)
 
     try:
@@ -643,7 +643,7 @@ def get_analytics_dashboard():
     global _analytics_overview_cache, _analytics_overview_cache_time
     now = time.time()
     with _analytics_cache_lock:
-        if _analytics_overview_cache is not None and (now - _analytics_overview_cache_time) < 60:
+        if _analytics_overview_cache is not None and (now - _analytics_overview_cache_time) < 1800:
             return jsonify(_analytics_overview_cache)
 
     if not db_indexes_created:
