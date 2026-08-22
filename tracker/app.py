@@ -21,7 +21,9 @@ else:
 
 def get_db_connection():
     if DB_TYPE == "postgres":
-        return psycopg2.connect(DATABASE_URL)
+        conn = psycopg2.connect(DATABASE_URL)
+        conn.autocommit = True
+        return conn
     else:
         conn = sqlite3.connect(SQLITE_DB_FILE)
         conn.row_factory = sqlite3.Row
