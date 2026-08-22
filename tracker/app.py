@@ -339,86 +339,98 @@ def update_aircraft_data():
         return jsonify({"error": "Unauthorized"}), 401
         
     payload = request.json
-    try:
-        if payload and 'aircraft' in payload:
-            with get_db_connection() as conn:
+    if payload and 'aircraft' in payload:
+        conn = None
+        try:
+            conn = get_db_connection()
+            if DB_TYPE == "postgres":
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
+            else:
                 cursor = conn.cursor()
                 
-                # Save raw payload for stateless retrieval
-                payload_str = json.dumps(payload)
-                upsert_q = "UPDATE latest_payload SET payload = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1"
-                if DB_TYPE == "postgres": upsert_q = upsert_q.replace("?", "%s")
-                cursor.execute(upsert_q, (payload_str,))
-                if cursor.rowcount == 0:
-                    insert_q = "INSERT INTO latest_payload (id, payload) VALUES (1, ?)"
-                    if DB_TYPE == "postgres": insert_q = insert_q.replace("?", "%s")
-                    cursor.execute(insert_q, (payload_str,))
+            # Save raw payload for stateless retrieval
+            payload_str = json.dumps(payload)
+            upsert_q = "UPDATE latest_payload SET payload = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1"
+            if DB_TYPE == "postgres": upsert_q = upsert_q.replace("?", "%s")
+            cursor.execute(upsert_q, (payload_str,))
+            if cursor.rowcount == 0:
+                insert_q = "INSERT INTO latest_payload (id, payload) VALUES (1, ?)"
+                if DB_TYPE == "postgres": insert_q = insert_q.replace("?", "%s")
+                cursor.execute(insert_q, (payload_str,))
 
-                # Fetch metadata map for aircraft hexes
-                hexes = [p.get('hex', '').lower() for p in payload['aircraft'] if p.get('hex')]
-                metadata_map = {}
-                if hexes:
-                    placeholders = ','.join(['%s' if DB_TYPE == 'postgres' else '?'] * len(hexes))
-                    meta_query = f"SELECT icao24, registration, model, typecode, operator FROM aircraft_metadata WHERE icao24 IN ({placeholders})"
-                    meta_res = execute_query(conn, meta_query, tuple(hexes))
-                    if meta_res:
-                        for row in meta_res:
-                            metadata_map[row['icao24']] = row
+            # Fetch metadata map for aircraft hexes using the single existing cursor
+            hexes = [p.get('hex', '').lower() for p in payload['aircraft'] if p.get('hex')]
+            metadata_map = {}
+            if hexes:
+                placeholders = ','.join(['%s' if DB_TYPE == 'postgres' else '?'] * len(hexes))
+                meta_query = f"SELECT icao24, registration, model, typecode, operator FROM aircraft_metadata WHERE icao24 IN ({placeholders})"
+                cursor.execute(meta_query, tuple(hexes))
+                meta_rows = cursor.fetchall()
+                if meta_rows:
+                    for row in meta_rows:
+                        r_dict = dict(row)
+                        metadata_map[r_dict['icao24']] = r_dict
 
-                # Save history
-                hist_query = '''
-                    INSERT INTO aircraft_history (hex, callsign, lat, lon, altitude, heading, speed, track, track_diff, operator, model, is_military)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                '''
-                if DB_TYPE == "postgres": hist_query = hist_query.replace("?", "%s")
+            # Save history
+            hist_query = '''
+                INSERT INTO aircraft_history (hex, callsign, lat, lon, altitude, heading, speed, track, track_diff, operator, model, is_military)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            '''
+            if DB_TYPE == "postgres": hist_query = hist_query.replace("?", "%s")
 
-                for plane in payload['aircraft']:
-                    seen = plane.get('seen', 0)
-                    if seen < 15:
-                        hex_code = plane.get('hex', '').lower()
-                        callsign = plane.get('flight', '').strip()
-                        lat = plane.get('lat')
-                        lon = plane.get('lon')
-                        altitude = plane.get('alt_baro') or plane.get('alt_geom')
-                        track = plane.get('track')
-                        heading = plane.get('mag_heading') if plane.get('mag_heading') is not None else (plane.get('heading') if plane.get('heading') is not None else plane.get('nav_heading'))
-                        speed = plane.get('gs') or plane.get('spd') or plane.get('speed')
-                        
-                        meta = metadata_map.get(hex_code, {})
-                        operator = plane.get('operator') or meta.get('operator')
-                        model = plane.get('model') or meta.get('model') or meta.get('typecode')
-                        squawk = str(plane.get('squawk', ''))
-                        
-                        track_diff = None
-                        if track is not None and heading is not None:
-                            try:
-                                d = abs(float(track) - float(heading))
-                                if d > 180:
-                                    d = 360 - d
-                                track_diff = round(d, 1)
-                            except Exception:
-                                track_diff = None
+            for plane in payload['aircraft']:
+                seen = plane.get('seen', 0)
+                if seen < 15:
+                    hex_code = plane.get('hex', '').lower()
+                    callsign = plane.get('flight', '').strip()
+                    lat = plane.get('lat')
+                    lon = plane.get('lon')
+                    altitude = plane.get('alt_baro') or plane.get('alt_geom')
+                    track = plane.get('track')
+                    heading = plane.get('mag_heading') if plane.get('mag_heading') is not None else (plane.get('heading') if plane.get('heading') is not None else plane.get('nav_heading'))
+                    speed = plane.get('gs') or plane.get('spd') or plane.get('speed')
+                    
+                    meta = metadata_map.get(hex_code, {})
+                    operator = plane.get('operator') or meta.get('operator')
+                    model = plane.get('model') or meta.get('model') or meta.get('typecode')
+                    squawk = str(plane.get('squawk', ''))
+                    
+                    track_diff = None
+                    if track is not None and heading is not None:
+                        try:
+                            d = abs(float(track) - float(heading))
+                            if d > 180:
+                                d = 360 - d
+                            track_diff = round(d, 1)
+                        except Exception:
+                            track_diff = None
 
-                        is_mili = 0
-                        call_upper = callsign.upper()
-                        op_upper = (operator or '').upper()
-                        mili_prefixes = ('RCH', 'PAT', 'SAM', 'CNV', 'GOTO', 'FORTE', 'JEDI', 'VIPER', 'TUSK', 'BONE', 'SHUCK', 'DARK', 'EVAC')
-                        is_af_military = call_upper.startswith('AF') and not call_upper.startswith(('AFR', 'AFL', 'AFE', 'AFW'))
-                        if squawk in ['7500', '7600', '7700'] or call_upper.startswith(mili_prefixes) or is_af_military or any(kw in op_upper for kw in ['AIR FORCE', 'NAVY', 'ARMY', 'COAST GUARD', 'MARINES', 'MILITARY', 'LUFTWAFFE']):
-                            is_mili = 1
+                    is_mili = 0
+                    call_upper = callsign.upper()
+                    op_upper = (operator or '').upper()
+                    mili_prefixes = ('RCH', 'PAT', 'SAM', 'CNV', 'GOTO', 'FORTE', 'JEDI', 'VIPER', 'TUSK', 'BONE', 'SHUCK', 'DARK', 'EVAC')
+                    is_af_military = call_upper.startswith('AF') and not call_upper.startswith(('AFR', 'AFL', 'AFE', 'AFW'))
+                    if squawk in ['7500', '7600', '7700'] or call_upper.startswith(mili_prefixes) or is_af_military or any(kw in op_upper for kw in ['AIR FORCE', 'NAVY', 'ARMY', 'COAST GUARD', 'MARINES', 'MILITARY', 'LUFTWAFFE']):
+                        is_mili = 1
 
-                        if lat is not None and lon is not None:
-                            cursor.execute(hist_query, (hex_code, callsign, lat, lon, altitude, heading, speed, track, track_diff, operator, model, is_mili))
-                
-                # Cleanup old data (> 7 days) periodically (1% of requests) to prevent DB lock contention
-                if random.random() < 0.01:
-                    cutoff = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time() - 7 * 86400))
-                    del_query = "DELETE FROM aircraft_history WHERE timestamp <= ?"
-                    if DB_TYPE == "postgres": del_query = del_query.replace("?", "%s")
-                    cursor.execute(del_query, (cutoff,))
+                    if lat is not None and lon is not None:
+                        cursor.execute(hist_query, (hex_code, callsign, lat, lon, altitude, heading, speed, track, track_diff, operator, model, is_mili))
+            
+            # Cleanup old data (> 7 days) periodically (1% of requests) to prevent DB lock contention
+            if random.random() < 0.01:
+                cutoff = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time() - 7 * 86400))
+                del_query = "DELETE FROM aircraft_history WHERE timestamp <= ?"
+                if DB_TYPE == "postgres": del_query = del_query.replace("?", "%s")
+                cursor.execute(del_query, (cutoff,))
+            
+            if conn and DB_TYPE != "postgres":
                 conn.commit()
-    except Exception as e:
-        print(f"Error saving to DB: {e}")
+        except Exception as e:
+            print(f"Error saving to DB: {e}")
+        finally:
+            if conn:
+                try: conn.close()
+                except Exception: pass
 
     return jsonify({"status": "success", "aircraft_count": len(request.json.get('aircraft', []))})
 
