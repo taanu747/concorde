@@ -1,7 +1,11 @@
 import csv
 import psycopg2
 import psycopg2.extras
+import sqlite3
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 

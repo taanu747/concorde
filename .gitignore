@@ -23,3 +23,4 @@ tracker/stats.json
 tracker/history/
 tracker/history_*.json
 test/
+.env
