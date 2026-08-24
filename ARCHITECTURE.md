@@ -39,54 +39,43 @@ concorde/
 
 ## 3. System Architecture & Components
 
-```
-+-----------------------------------------------------------------------------------+
-|                              RASPBERRY PI EDGE FEEDER                             |
-|                                                                                   |
-|  [ 1090MHz Antenna ] --> [ RTL-SDR Dongle ] --> [ dump1090-fa Decoder ]          |
-|                                                          |                        |
-|                                        Writes to RAM disk (/run/dump1090-fa)     |
-|                                                          v                        |
-|                                               [ aircraft.json ]                   |
-|                                                          |                        |
-|                                           Polled by feeder.py (1.5s)              |
-|                                                          |                        |
-|                                        HTTP POST /api/update (Bearer Token)       |
-+----------------------------------------------------------|------------------------+
-                                                           |
-                                                           v
-+-----------------------------------------------------------------------------------+
-|                            CLOUD BACKEND (FLASK / VERCEL)                         |
-|                                                                                   |
-|  [ app.py REST Server ] <--------------------------------+                        |
-|        |                                                 |                        |
-|        +---> Memory Lock (`latest_payload`)             |                        |
-|        |                                                 |                        |
-|        +---> DB Connection (PostgreSQL / SQLite)         |                        |
-|        |     ├── Table: `aircraft_history`               |                        |
-|        |     ├── Table: `latest_payload`                 |                        |
-|        |     └── Table: `aircraft_metadata`              |                        |
-|        |                                                 |                        |
-|        +---> Engine 1: Telemetry Parser & Wind Drift     |                        |
-|        +---> Engine 2: Intent & Flight Phase Classifier  |                        |
-|        +---> Engine 3: AI Co-Pilot Q&A & Database SQL    |                        |
-+----------------------------------------------------------|------------------------+
-                                                           |
-                                         JSON Telemetry & HTTP APIs
-                                                           |
-                                                           v
-+-----------------------------------------------------------------------------------+
-|                               FRONTEND WEB APPLICATION                            |
-|                                                                                   |
-|  [ index.html + style.css + app.js ]                                              |
-|        ├── Leaflet.js Map Rendering & Plane Icons                                |
-|        ├── Dynamic Speed & Altitude Color Coding                                  |
-|        ├── Canvas Atmospheric Wind Streamlines (Open-Meteo API)                   |
-|        ├── Animated NEXRAD Radar Storm Layer (RainViewer API)                     |
-|        ├── 7-Day Streamline Heatmap Layer (Leaflet.heat)                         |
-|        ├── Airspace Intelligence Analytics Modal                                 |
-|        └── Glassmorphic AI Airspace Co-Pilot Drawer                              |
-+-----------------------------------------------------------------------------------+
+```mermaid
+graph TD
+    %% Edge Devices
+    subgraph Edge["Raspberry Pi Edge (Local Airspace)"]
+        A[1090MHz Antenna] -->|Raw Radio Signals| B[RTL-SDR USB Dongle]
+        B -->|Digital I/Q| C[dump1090-fa Decoder]
+        C -->|Decodes Aircraft JSON| D[RAM Disk: aircraft.json]
+        D -->|Polled every 1.5s| E[feeder.py]
+    end
+
+    %% Cloud Backend
+    subgraph Cloud["Cloud Backend Server (Render / Vercel)"]
+        E -->|HTTP POST /api/update| F[app.py REST API]
+        F -->|Enriches with Operator & Model| G[latest_payload Cache]
+        
+        %% Database Layer
+        subgraph DB["Database Layer (Supabase PostgreSQL)"]
+            F -->|Inserts Flight History| H[(aircraft_history)]
+            F -->|Reads Aircraft Metadata| I[(aircraft_metadata)]
+            F -->|Upserts Live State| J[(latest_payload)]
+        end
+        
+        %% AI Layer
+        subgraph AI["AI Co-Pilot Engine"]
+            K[Natural Language Query] --> F
+            F -->|Flight Context + Prompt| L[Google Gemini API]
+            L -->|Generates Flight Intent Analysis| F
+        end
+    end
+
+    %% Frontend Web Application
+    subgraph Client["Frontend Web Application (Browser)"]
+        F -->|JSON Telemetry & HTML| M[index.html + app.js]
+        M -->|Leaflet.js Map| N[Live Aircraft Markers]
+        M -->|Heatmap Layer| O[7-Day Flight Corridors]
+        M -->|Chat UI| K
+    end
 ```
 
 ---
@@ -117,19 +106,13 @@ concorde/
    - Requests `/api/history` to load historical coordinates, feeding `Leaflet.heat` to render high-density flight corridors and terminal arrival clusters.
 
 ### Phase 4: AI Airspace Co-Pilot Engine (`tracker/app.py` -> `/api/ai/query`)
-1. **Self-Contained Serverless Architecture**:
-   - Integrated directly into `tracker/app.py` for 100% Vercel serverless import reliability without sub-package module resolution errors.
-2. **Flight Intent Telemetry & Wind Drift Classifier**:
-   - **Ground Taxi**: Altitude 0 ft / `'ground'`.
-   - **Initial Takeoff / Short Approach**: Altitude < 3,000 ft.
-   - **Terminal Maneuvering Area (TMA)**: Altitude 3,000–10,000 ft (evaluating the 250-knot speed limit rule).
-   - **Transition Climb / Descent**: Altitude 10,000–28,000 ft.
-   - **En-Route Jetway Cruise**: Altitude > 28,000 ft.
-   - **Wind Crab Angle Compensation**: Calculates $| \text{track} - \text{heading} | \ge 2.5^\circ$ to explain pilot crosswind correction.
-3. **Database Text-to-SQL Query Generator**:
-   - Converts natural language queries (*"What was the lowest flight recorded?"*, *"Top airlines"*, *"Fastest planes"*, *"Military flights"*) into dynamic SQL queries executed live against PostgreSQL / SQLite.
-4. **Aviation Domain Knowledge Engine**:
-   - Answers educational questions on altitude rules (semi-circular rule), Great Circle curved flight paths, weather radar storm cell avoidance, holding pattern orbits, and emergency squawk codes (`7500`, `7600`, `7700`).
+1. **Google Gemini LLM Integration**:
+   - The backend natively integrates with the `google-genai` SDK to route natural language flight questions to the `gemini-3.6-flash` model.
+2. **Context-Aware Prompt Injection**:
+   - When a user asks about a specific aircraft, the backend automatically intercepts the query, pulls the aircraft's live telemetry (altitude, ground speed, track, heading, aircraft model) from the database, and injects it into Gemini's system prompt.
+   - This allows Gemini to accurately explain complex aviation concepts like "wind drift crab angles" and "terminal maneuvering" without hallucinating.
+3. **Structured SQL Rank Queries**:
+   - For structured database questions (e.g., "What are the top 10 airlines?", "Fastest planes recorded"), the backend continues to use highly optimized SQL queries to return HTML data tables instantly.
 
 ---
 
