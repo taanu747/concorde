@@ -12,6 +12,8 @@ import threading
 import re
 import random
 from flask import Flask, jsonify, render_template, request
+from google import genai
+import markdown
 
 # Database Configuration
 DATABASE_URL = os.environ.get("DATABASE_URL")
@@ -1090,197 +1092,7 @@ def ai_copilot_query():
                         break
 
             # -------------------------------------------------------------
-            # STEP 2: Aircraft Intent Explanation ("Why is my flight doing that?")
-            # -------------------------------------------------------------
-            # Only trigger flight intent mode if a callsign was extracted OR query asks about flight intent
-            is_intent_query = bool(extracted_callsign) or any(w in query_lower for w in ["doing that", "flight intent", "doing", "this plane", "selected", "why is flight", "explain selected", "doing what"])
-            
-            if aircraft_state and is_intent_query:
-                callsign = aircraft_state.get('flight') or aircraft_state.get('callsign') or aircraft_state.get('hex', 'Selected Aircraft')
-                hex_code = str(aircraft_state.get('hex', 'N/A')).upper()
-                alt_raw = aircraft_state.get('alt_baro') if aircraft_state.get('alt_baro') is not None else (aircraft_state.get('altitude') or 0)
-                alt = safe_round(alt_raw)
-                spd = safe_round(aircraft_state.get('gs') if aircraft_state.get('gs') is not None else aircraft_state.get('speed'))
-                track = aircraft_state.get('track')
-                heading = aircraft_state.get('mag_heading') if aircraft_state.get('mag_heading') is not None else aircraft_state.get('heading')
-                model = clean_aircraft_model_name(aircraft_state.get('model') or aircraft_state.get('typecode'))
-                operator = aircraft_state.get('operator') or 'Flight'
-                squawk = str(aircraft_state.get('squawk', ''))
-                
-                explanations = []
-                
-                is_light_piston = any(ga in (model or '').upper() for ga in ['172', 'C172', 'C152', 'C182', 'PA28', 'P28A', 'SR22', 'C150', 'DA40', 'DA20', 'C72R', 'SKYHAWK', 'CHEROKEE', 'ARCHER', 'CENTURION', 'BONANZA']) or (spd > 0 and spd < 125 and alt > 0 and alt < 4000)
-                
-                # Flight Phase & Altitude Intent
-                if alt_raw == 'ground' or alt == 0:
-                    explanations.append("<b>📍 Ground Operations / Taxi:</b> Aircraft is currently stationary or taxiing on airport aprons/runways.")
-                elif is_light_piston and alt < 4000:
-                    explanations.append(f"<b>🧑‍✈️ General Aviation Flight Training / Local VFR Maneuvers:</b> Flying a light aircraft ({model}) at low altitude ({alt:,} ft) at {spd} kts. Operating under Visual Flight Rules (VFR), this pilot is likely practicing flight training maneuvers (360° steep turns, ground reference orbits, stall recovery) or conducting local airfield touch-and-go pattern work.")
-                elif alt < 3000:
-                    explanations.append(f"<b>🛫 Initial Takeoff / Short Approach:</b> Flying at low altitude ({alt:,} ft) at {spd} kts. Operating within immediate airport control zone for runway departure or final landing approach.")
-                elif alt >= 3000 and alt < 10000:
-                    explanations.append(f"<b>🏙️ Terminal Maneuvering Area (TMA):</b> Transiting terminal airspace ({alt:,} ft) at {spd} kts. Air Traffic Control (ATC) restricts speed below 250 kts for safety and noise abatement during arrival/departure routing.")
-                elif alt >= 10000 and alt < 28000:
-                    explanations.append(f"<b>📈 Transition Climb / Descent:</b> Climbing or descending through intermediate flight levels ({alt:,} ft) at {spd} kts between airport terminal zones and high-altitude airways.")
-                else:
-                    explanations.append(f"<b>✈️ En-Route Jetway Cruise:</b> Cruising at high altitude ({alt:,} ft) at {spd} kts. Following assigned Jet Airways in controlled upper airspace.")
-
-                # Turboprop / Light Aircraft Maneuvering & Pattern Work
-                is_turboprop = any(tp in (model or '').upper() for tp in ['C208', 'BE20', 'DH8A', 'DH8D', 'AT72', 'AT45', 'PC12', 'B350', 'SW4', 'C25A', 'E120', 'SF34', 'KING AIR', 'CARAVAN', 'DASH 8']) or (alt > 0 and alt < 15000 and spd > 0 and spd < 220)
-                if is_turboprop:
-                    explanations.append(f"<b>🔄 Turboprop Low-Altitude Turning & Pattern Work:</b> Slower regional turboprops and light aircraft ({model}) fly below 15,000 ft and execute frequent 90°–360° turns for local VFR airfield patterns, low-altitude ATC vectoring around high-speed jetliners, or aerial surveying flights.")
-
-                # Atmospheric Wind & Crab Angle Offset
-                if track is not None and heading is not None:
-                    trk_val = safe_round(track, 1)
-                    hdg_val = safe_round(heading, 1)
-                    drift = abs(trk_val - hdg_val)
-                    if drift > 180: drift = 360 - drift
-                    if drift >= 2.5:
-                        explanations.append(f"<b>💨 Wind Drift Crab Compensation:</b> Pilot/Autopilot has offset nose heading ({hdg_val}°) by <b>{round(drift, 1)}°</b> relative to ground track ({trk_val}°) to compensate for atmospheric crosswinds.")
-                    else:
-                        explanations.append(f"<b>🧭 Direct Track Alignment:</b> Heading ({hdg_val}°) aligns cleanly with ground track ({trk_val}°), experiencing direct headwind or tailwind.")
-
-                # Special squawk / Military mission
-                if squawk in ['7500', '7600', '7700']:
-                    explanations.append(f"<b>⚠️ Priority Emergency Squawk ({squawk}):</b> Transmitting priority squawk code for Air Traffic Control immediate attention.")
-                elif any(kw in (operator or '').upper() for kw in ['AIR FORCE', 'NAVY', 'ARMY', 'MILITARY']) or hex_code.startswith('AE'):
-                    explanations.append("<b>🎖️ Tactical / Government Transport:</b> Military asset conducting training, logistical transport, or tactical airspace routing.")
-
-                full_text = f"Flight Intent Analysis for <b>{str(callsign).strip()}</b> ({model}):<br><br>" + "<br><br>".join(explanations)
-                return jsonify({
-                    "type": "explanation",
-                    "text": full_text
-                })
-
-            # -------------------------------------------------------------
-            # STEP 3: Aviation & Airspace Feature Knowledge Q&A
-            # -------------------------------------------------------------
-            
-            # Altitude Differences ("why are some planes cruising lower than others")
-            if "lower" in query_lower or "higher" in query_lower or "cruising lower" in query_lower or "different alt" in query_lower:
-                return jsonify({
-                    "type": "explanation",
-                    "text": "<b>✈️ Why Aircraft Cruise at Different Altitudes:</b><br><br>"
-                            "Aircraft cruise at different altitudes based on 4 primary aviation rules:<br><br>"
-                            "1. <b>Aircraft Type & Performance:</b> Turboprops and light aircraft fly lower (15,000–25,000 ft), while jetliners cruise higher (30,000–41,000 ft) where thin air maximizes fuel efficiency.<br>"
-                            "2. <b>Flight Distance:</b> Short regional hops (100–200 miles) don't climb to 35,000 ft because climbing takes too much time and fuel.<br>"
-                            "3. <b>Direction of Flight (Semi-Circular Rule):</b> Eastbound flights cruise at ODD thousand altitudes (e.g., 33,000 ft), while Westbound flights cruise at EVEN thousand altitudes (e.g., 34,000 ft) to prevent mid-air collisions.<br>"
-                            "4. <b>Jetstreams & Turbulence:</b> Pilots request altitude changes to catch 100+ knot tailwinds or avoid bumpy turbulence layers."
-                })
-
-            # Curved / Squiggly Flight Paths
-            if "curve" in query_lower or "curved" in query_lower or "straight" in query_lower or "route" in query_lower:
-                return jsonify({
-                    "type": "explanation",
-                    "text": "<b>🌐 Curved Flight Paths & Great Circle Routes:</b><br><br>"
-                            "Flight paths look curved on flat maps for three reasons:<br><br>"
-                            "1. <b>Great Circle Routes:</b> The Earth is a sphere! A curved line on a flat 2D map is actually the shortest 3D distance over the globe.<br>"
-                            "2. <b>Airway Highways:</b> Aircraft follow assigned navigation waypoints (Jetways) rather than flying in a straight line.<br>"
-                            "3. <b>ATC Vectoring:</b> Air Traffic Control steers planes around severe weather storms or restricted military airspace."
-                })
-
-            # 250-Knot Speed Limit
-            if "10,000" in query_lower or "10000" in query_lower or "speed limit" in query_lower:
-                return jsonify({
-                    "type": "explanation",
-                    "text": "<b>⏱️ The 250-Knot Speed Limit Rule (< 10,000 ft):</b><br><br>"
-                            "FAA and ICAO regulations mandate a maximum speed limit of <b>250 knots (287 mph)</b> below 10,000 ft MSL.<br><br>"
-                            "• This ensures pilots have sufficient reaction time to see and avoid visual general aviation traffic in congested terminal airport airspace."
-                })
-
-            # Squawk Codes
-            if "squawk" in query_lower or "transponder" in query_lower:
-                return jsonify({
-                    "type": "explanation",
-                    "text": "<b>📡 Transponder Squawk Codes:</b><br><br>"
-                            "Squawk codes are 4-digit octal numbers assigned by ATC to identify aircraft on radar:<br><br>"
-                            "• <b>1200:</b> VFR (Visual Flight Rules) private flights.<br>"
-                            "• <b>7500:</b> Unlawful Interference / Hijack Emergency.<br>"
-                            "• <b>7600:</b> Radio Communications Failure.<br>"
-                            "• <b>7700:</b> General In-Flight Emergency."
-                })
-
-            if "jetway" in query_lower or "airway" in query_lower:
-                return jsonify({
-                    "type": "explanation",
-                    "text": "<b>✈️ High-Altitude Jetways & Airways:</b><br><br>"
-                            "A <b>Jetway</b> (or VOR Jet Route / RNAV Q-Route) is an official high-altitude highway in the sky defined by Federal Aviation Administration (FAA) & ICAO navigation waypoints.<br><br>"
-                            "• Commercial airliners cruise along assigned Jetways between 18,000 ft and 45,000 ft under radar vectoring by Air Traffic Control (ATC)."
-                })
-
-            if "heatmap" in query_lower or "line" in query_lower or "lines" in query_lower:
-                return jsonify({
-                    "type": "explanation",
-                    "text": "<b>🔥 Heatmap Flight Streamlines Explanation:</b><br><br>"
-                            "The lines on the heatmap represent historical flight track streamlines recorded by your feeder over the past 7 days.<br><br>"
-                            "• <b>Dense Line Clusters:</b> Indicate heavily trafficked high-altitude Jetways and primary airport arrival/departure corridors.<br>"
-                            "• <b>Concentrated Hubs:</b> Mark terminal control areas around major regional airports where aircraft align for final approach."
-                })
-
-            if "radar" in query_lower or "weather" in query_lower or "storm" in query_lower:
-                return jsonify({
-                    "type": "explanation",
-                    "text": "<b>🌧️ Weather Radar & Storm Avoidance:</b><br><br>"
-                            "The animated weather layer displays NEXRAD Doppler precipitation intensity (dBZ).<br><br>"
-                            "• Pilots routinely request ATC tactical weather deviations to steer 10-20 miles around severe convective storm cells to avoid severe turbulence, icing, and hail."
-                })
-
-            if "weather" in query_lower or "wind" in query_lower or "drift" in query_lower or "affect" in query_lower or "affecting" in query_lower or "crosswind" in query_lower or "streamlines" in query_lower or "open-meteo" in query_lower or "storm" in query_lower:
-                drift_val = 0.0
-                try:
-                    if DB_TYPE == "postgres":
-                        q = "SELECT AVG(track_diff) as avg_drift FROM aircraft_history WHERE track_diff IS NOT NULL AND track_diff > 0 AND timestamp >= NOW() - INTERVAL '24 hours'"
-                        res = execute_query(conn, q)
-                    else:
-                        cutoff_24h = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time() - 86400))
-                        q = "SELECT AVG(track_diff) as avg_drift FROM aircraft_history WHERE track_diff IS NOT NULL AND track_diff > 0 AND timestamp >= ?"
-                        res = execute_query(conn, q, (cutoff_24h,))
-                    
-                    if res and res[0] and res[0]['avg_drift'] is not None and float(res[0]['avg_drift']) > 0:
-                        drift_val = round(float(res[0]['avg_drift']), 1)
-                    else:
-                        with lock:
-                            aircraft_dict = latest_payload.get('aircraft', {})
-                            target_list = aircraft_dict.values() if isinstance(aircraft_dict, dict) else (aircraft_dict if isinstance(aircraft_dict, list) else [])
-                            diffs = []
-                            for p in target_list:
-                                trk = p.get('track')
-                                hdg = p.get('mag_heading') if p.get('mag_heading') is not None else p.get('heading')
-                                if trk is not None and hdg is not None:
-                                    d = abs(float(trk) - float(hdg))
-                                    if d > 180: d = 360 - d
-                                    if d > 0: diffs.append(d)
-                            if diffs:
-                                drift_val = round(sum(diffs) / len(diffs), 1)
-                            else:
-                                drift_val = 7.4
-                except Exception:
-                    drift_val = 7.4
-
-                return jsonify({
-                    "type": "explanation",
-                    "text": "<b>🌧️ How Weather & Wind Affect Flight Paths:</b><br><br>"
-                            "Weather and aloft atmospheric winds dynamically shape flight paths in 4 key ways:<br><br>"
-                            f"1. <b>Crosswind Crab Angle ({drift_val}° Avg Offset Right Now):</b> Aircraft turn their nose into the wind (crab angle) so aloft crosswinds push them straight along their ground track.<br>"
-                            "2. <b>Jetstream Highway Acceleration:</b> High-altitude jetstreams (100–180 mph) provide powerful tailwinds for Eastbound flights, shortening flight times by up to an hour.<br>"
-                            "3. <b>Tactical Storm Cell Avoidance:</b> Pilots use airborne NEXRAD weather radar to request 10–20 mile deviations around thunderstorm cells to avoid severe hail and turbulence.<br>"
-                            "4. <b>Airport Holding & Spacing:</b> Storms or gusty tailwinds near airports force ATC to increase aircraft separation from 3 miles to 5+ miles, creating holding patterns."
-                })
-
-            if "turboprop" in query_lower or "prop" in query_lower or "turn" in query_lower or "turning" in query_lower or "circle" in query_lower or "holding" in query_lower:
-                return jsonify({
-                    "type": "explanation",
-                    "text": "<b>🔄 Why Turboprops & Light Aircraft Turn So Much:</b><br><br>"
-                            "Small turboprops and regional prop planes (e.g., Beechcraft King Air, Dash-8, ATR-72, Cessna Caravan) execute frequent steep turns for 4 primary reasons:<br><br>"
-                            "1. <b>Airfield Traffic Patterns:</b> Slower regional aircraft fly tight 90° and 180° touch-and-go landing circuits around local airport runways.<br>"
-                            "2. <b>Low-Altitude ATC Vectoring:</b> Cruising below 15,000 ft requires Air Traffic Control to give tactical heading turns to sequence slower turboprops around high-speed commercial jetliners.<br>"
-                            "3. <b>Tight Turning Radius:</b> Operating at lower speeds (150–220 knots) allows turboprops to make sharp 360° bank turns in a small fraction of the airspace required by large jetliners.<br>"
-                            "4. <b>Aerial Surveying & Inspection:</b> Specialized twin-turboprops fly back-and-forth grid patterns for geographic surveying, pipeline inspection, and flight calibration."
-                })
-
-            # -------------------------------------------------------------
-            # STEP 4: Natural Language Database & Rank Queries
+            # STEP 2: Natural Language Database & Rank Queries (Structured Data)
             # -------------------------------------------------------------
             cutoff_14d = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time() - 14 * 86400))
 
@@ -1375,15 +1187,32 @@ def ai_copilot_query():
                     "table": rows
                 })
 
-            # Fallback Helpful Guidance
+            # -------------------------------------------------------------
+            # STEP 3: Fallback to Google Gemini for Natural Language & Intent
+            # -------------------------------------------------------------
+            gemini_api_key = os.environ.get("GEMINI_API_KEY")
+            if not gemini_api_key:
+                return jsonify({
+                    "type": "explanation", 
+                    "text": "Gemini API key is not configured. Please set GEMINI_API_KEY in your environment variables."
+                })
+
+            sys_prompt = "You are an expert Air Traffic Control AI Copilot. Your job is to answer the user's questions about aviation, flight intent, and weather. Be highly educational and clear. Do not hallucinate data that isn't provided."
+            if aircraft_state:
+                sys_prompt += f"\\n\\nThe user is asking about this active flight. Here is the live telemetry data:\\n{json.dumps(aircraft_state)}"
+                sys_prompt += "\\n\\nUse this data (altitude, speed, heading, track, operator, model) to explicitly explain what the flight is doing. Note: The difference between track (ground path) and heading (nose direction) indicates wind drift crab angle."
+
+            client = genai.Client(api_key=gemini_api_key)
+            response = client.models.generate_content(
+                model='gemini-3.6-flash',
+                contents=[sys_prompt, user_query]
+            )
+
+            html_text = markdown.markdown(response.text)
+            
             return jsonify({
                 "type": "explanation",
-                "text": f"I analyzed your airspace question: <i>\"{user_query}\"</i>.<br><br>"
-                        "<b>Try asking:</b><br>"
-                        "• <i>\"What is a Jetway?\"</i><br>"
-                        "• <i>\"Why are there lines in the heatmap?\"</i><br>"
-                        "• <i>\"Which model is the most common?\"</i><br>"
-                        "• Or select any plane on the map and tap <b>🤖 Explain Flight Intent</b>!"
+                "text": html_text
             })
 
     except Exception as e:

@@ -1592,11 +1592,11 @@ window.explainAircraftIntent = (hex) => {
     } else if (targetHex && aircraftData[targetHex]) {
         plane = aircraftData[targetHex];
     }
-    
+
     if (aiSidebar) {
         aiSidebar.classList.add('sidebar-open');
     }
-    
+
     const queryText = plane ? `Why is flight ${plane.flight ? plane.flight.trim() : targetHex} doing that?` : `Explain flight intent for aircraft ${targetHex}`;
     sendAiQuery(queryText, plane);
 };
