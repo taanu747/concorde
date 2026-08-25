@@ -1,4 +1,4 @@
-# How to Contribute Flight Data to Concorde
+# How to Contribute Flight Data to SkySync
 
 You can help expand the coverage map of this flight tracker by setting up your own antenna and streaming live aircraft data to our server! It takes about 15 minutes to set up.
 

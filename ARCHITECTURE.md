@@ -1,10 +1,10 @@
-# Concorde ADS-B Flight Tracker & AI Airspace Co-Pilot
+# SkySync ADS-B Flight Tracker & AI Airspace Co-Pilot
 ## Comprehensive Architecture, Data Flow, and Directory Reference
 
 ---
 
 ## 1. Overview & Vision
-**Concorde** is an advanced real-time ADS-B flight tracker and AI-powered airspace intelligence engine created for the **Congressional App Contest**.
+**SkySync** is an advanced real-time ADS-B flight tracker and AI-powered airspace intelligence engine created for the **Congressional App Contest**.
 
 ### Problem & Solution Statement
 > *"Air traffic affects almost everyone, but most flight trackers just show planes and where they are going. This tracker helps people understand the **WHY** in air traffic—using live weather radar, wind vectors, 7-day historical database analytics, and an integrated AI Airspace Co-Pilot."*
