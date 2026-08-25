@@ -1,4 +1,4 @@
-# SkySync ADS-B Flight Tracker & AI Airspace Co-Pilot
+# SkySync Flight Tracker & AI Airspace Co-Pilot
 ## Comprehensive Architecture, Data Flow, and Directory Reference
 
 ---
