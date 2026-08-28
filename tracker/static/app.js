@@ -12,8 +12,8 @@ const mapOptions = {
     noWrap: true,
     zIndex: 1 // Pin base maps to the very bottom
 };
-const lightTiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', mapOptions);
-const darkTiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', mapOptions);
+const lightTiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=cb1_2hxz_1_25d5862bc9daa3d8128eee73', mapOptions);
+const darkTiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=cb1_2hxz_1_25d5862bc9daa3d8128eee73', mapOptions);
 
 lightTiles.addTo(map);
 
