@@ -959,27 +959,30 @@ def get_analytics_dashboard():
             try:
                 if DB_TYPE == "postgres":
                     q_military = '''
-                        SELECT hex, callsign, altitude, speed, model, operator, timestamp
+                        SELECT hex, callsign, MAX(altitude) as altitude, MAX(speed) as speed, MAX(model) as model, MAX(operator) as operator, MAX(timestamp) as timestamp
                         FROM aircraft_history
                         WHERE is_military = 1 AND timestamp >= NOW() - INTERVAL '7 days' AND (callsign IS NULL OR (callsign NOT LIKE 'AFR%' AND callsign NOT LIKE 'AFL%' AND callsign NOT LIKE 'AFE%'))
-                        ORDER BY timestamp DESC
+                        GROUP BY hex, callsign
+                        ORDER BY MAX(timestamp) DESC
                         LIMIT 5
                     '''
                 else:
                     q_military = '''
-                        SELECT hex, callsign, altitude, speed, model, operator, timestamp
+                        SELECT hex, callsign, MAX(altitude) as altitude, MAX(speed) as speed, MAX(model) as model, MAX(operator) as operator, MAX(timestamp) as timestamp
                         FROM aircraft_history
                         WHERE is_military = 1 AND timestamp >= ? AND (callsign IS NULL OR (callsign NOT LIKE 'AFR%' AND callsign NOT LIKE 'AFL%' AND callsign NOT LIKE 'AFE%'))
-                        ORDER BY timestamp DESC
+                        GROUP BY hex, callsign
+                        ORDER BY MAX(timestamp) DESC
                         LIMIT 5
                     '''
                 military_flights = execute_query(conn, q_military) if DB_TYPE == "postgres" else execute_query(conn, q_military, (cutoff_7d,))
                 if not military_flights:
                     q_military_fb = '''
-                        SELECT hex, callsign, altitude, speed, model, operator, timestamp
+                        SELECT hex, callsign, MAX(altitude) as altitude, MAX(speed) as speed, MAX(model) as model, MAX(operator) as operator, MAX(timestamp) as timestamp
                         FROM aircraft_history
                         WHERE is_military = 1 AND (callsign IS NULL OR (callsign NOT LIKE 'AFR%' AND callsign NOT LIKE 'AFL%' AND callsign NOT LIKE 'AFE%'))
-                        ORDER BY timestamp DESC
+                        GROUP BY hex, callsign
+                        ORDER BY MAX(timestamp) DESC
                         LIMIT 5
                     '''
                     military_flights = execute_query(conn, q_military_fb) or []
