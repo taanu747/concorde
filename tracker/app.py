@@ -43,7 +43,11 @@ def execute_query(conn, query, params=(), commit=False):
         else:
             cursor = conn.cursor()
             
-        cursor.execute(query, params)
+        if params:
+            cursor.execute(query, params)
+        else:
+            cursor.execute(query)
+            
         if commit:
             conn.commit()
         
