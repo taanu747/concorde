@@ -671,10 +671,9 @@ const stopPlayback = () => {
 };
 
 if (historySubmitBtn && historyLiveBtn && historyTimeInput) {
-    // Default to current local time in datetime input for convenience
+    // Default to current UTC time in datetime input for convenience
     const now = new Date();
-    const localISOString = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-    historyTimeInput.value = localISOString;
+    historyTimeInput.value = now.toISOString().slice(0, 16);
 
     historySubmitBtn.addEventListener('click', async () => {
         stopPlayback();

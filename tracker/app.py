@@ -646,9 +646,9 @@ def get_historical_aircraft_data():
         
         with get_db_connection() as conn:
             query_sql = """
-                SELECT hex, callsign as flight, lat, lon, altitude as alt_baro, heading as track, timestamp
+                SELECT hex, callsign as flight, lat, lon, altitude as alt_baro, COALESCE(track, heading) as track, timestamp
                 FROM (
-                    SELECT hex, callsign, lat, lon, altitude, heading, timestamp,
+                    SELECT hex, callsign, lat, lon, altitude, heading, track, timestamp,
                            ROW_NUMBER() OVER(PARTITION BY hex ORDER BY timestamp DESC) as rn
                     FROM aircraft_history
                     WHERE timestamp >= ? AND timestamp <= ?
