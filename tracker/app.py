@@ -434,6 +434,9 @@ def update_aircraft_data():
                     is_af_military = call_upper.startswith('AF') and not call_upper.startswith(('AFR', 'AFL', 'AFE', 'AFW'))
                     if squawk in ['7500', '7600', '7700'] or call_upper.startswith(mili_prefixes) or is_af_military or any(kw in op_upper for kw in ['AIR FORCE', 'NAVY', 'ARMY', 'COAST GUARD', 'MARINES', 'MILITARY', 'LUFTWAFFE']):
                         is_mili = 1
+                        
+                    if is_mili == 1 and model and any(ga in model.upper() for ga in ['PA-28', 'C172', 'C152', 'SR22', 'CESSNA 172', 'CESSNA 152']):
+                        is_mili = 0
 
                     if lat is not None and lon is not None:
                         cursor.execute(hist_query, (hex_code, callsign, lat, lon, altitude, heading, speed, track, track_diff, operator, model, is_mili))
@@ -959,29 +962,29 @@ def get_analytics_dashboard():
             try:
                 if DB_TYPE == "postgres":
                     q_military = '''
-                        SELECT hex, callsign, MAX(altitude) as altitude, MAX(speed) as speed, MAX(model) as model, MAX(operator) as operator, MAX(timestamp) as timestamp
+                        SELECT hex, MAX(callsign) as callsign, MAX(altitude) as altitude, MAX(speed) as speed, MAX(model) as model, MAX(operator) as operator, MAX(timestamp) as timestamp
                         FROM aircraft_history
                         WHERE is_military = 1 AND timestamp >= NOW() - INTERVAL '7 days' AND (callsign IS NULL OR (callsign NOT LIKE 'AFR%' AND callsign NOT LIKE 'AFL%' AND callsign NOT LIKE 'AFE%'))
-                        GROUP BY hex, callsign
+                        GROUP BY hex
                         ORDER BY MAX(timestamp) DESC
                         LIMIT 5
                     '''
                 else:
                     q_military = '''
-                        SELECT hex, callsign, MAX(altitude) as altitude, MAX(speed) as speed, MAX(model) as model, MAX(operator) as operator, MAX(timestamp) as timestamp
+                        SELECT hex, MAX(callsign) as callsign, MAX(altitude) as altitude, MAX(speed) as speed, MAX(model) as model, MAX(operator) as operator, MAX(timestamp) as timestamp
                         FROM aircraft_history
                         WHERE is_military = 1 AND timestamp >= ? AND (callsign IS NULL OR (callsign NOT LIKE 'AFR%' AND callsign NOT LIKE 'AFL%' AND callsign NOT LIKE 'AFE%'))
-                        GROUP BY hex, callsign
+                        GROUP BY hex
                         ORDER BY MAX(timestamp) DESC
                         LIMIT 5
                     '''
                 military_flights = execute_query(conn, q_military) if DB_TYPE == "postgres" else execute_query(conn, q_military, (cutoff_7d,))
                 if not military_flights:
                     q_military_fb = '''
-                        SELECT hex, callsign, MAX(altitude) as altitude, MAX(speed) as speed, MAX(model) as model, MAX(operator) as operator, MAX(timestamp) as timestamp
+                        SELECT hex, MAX(callsign) as callsign, MAX(altitude) as altitude, MAX(speed) as speed, MAX(model) as model, MAX(operator) as operator, MAX(timestamp) as timestamp
                         FROM aircraft_history
                         WHERE is_military = 1 AND (callsign IS NULL OR (callsign NOT LIKE 'AFR%' AND callsign NOT LIKE 'AFL%' AND callsign NOT LIKE 'AFE%'))
-                        GROUP BY hex, callsign
+                        GROUP BY hex
                         ORDER BY MAX(timestamp) DESC
                         LIMIT 5
                     '''
