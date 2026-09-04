@@ -1214,7 +1214,7 @@ def ai_copilot_query():
 
             client = genai.Client(api_key=gemini_api_key)
             response = client.models.generate_content(
-                model='gemini-3.6-flash',
+                model='gemini-2.5-flash',
                 contents=[sys_prompt, user_query]
             )
 
