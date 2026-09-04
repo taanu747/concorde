@@ -1226,8 +1226,10 @@ def ai_copilot_query():
             })
 
     except Exception as e:
+        import traceback
+        err_str = traceback.format_exc()
         print(f"AI Co-Pilot query error: {e}")
-        return jsonify({"type": "explanation", "text": f"Sorry, I had trouble parsing that query. Try asking <b>\"What is a Jetway?\"</b> or select an aircraft and tap <b>🤖 Explain Flight Intent</b>."})
+        return jsonify({"type": "explanation", "text": f"DEBUG ERROR: {str(e)} <br><pre>{err_str}</pre>"})
 
 if __name__ == '__main__':
     # Running securely on localhost port 8081 to avoid macOS AirPlay / port exhaustion collisions
