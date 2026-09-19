@@ -643,13 +643,14 @@ const fetchAndRender = async (url) => {
 
 // Main function to fetch data and update the map
 const updateAircraft = async () => {
-    if (!isLiveMode) return;
+    // Save bandwidth: Don't poll if the user is looking at another tab or if not in live mode
+    if (!isLiveMode || document.hidden) return;
     await fetchAndRender('/api/data');
 };
 
-// Initial fetch and set interval for polling every 1 second
+// Initial fetch and set interval for polling every 3 seconds (reduces bandwidth by 66%)
 updateAircraft();
-setInterval(updateAircraft, 1000);
+setInterval(updateAircraft, 3000);
 
 // Set up UI Event listeners for Time Travel
 const historySubmitBtn = document.getElementById('history-submit-btn');
