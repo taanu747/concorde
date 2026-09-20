@@ -344,15 +344,19 @@ def index():
     # Pass a timestamp parameter to bust browser cache for static files
     return render_template('index.html', ts=int(time.time()))
 
-@app.route('/api/update', methods=['POST'])
+# In-memory caching to save massive amounts of database bandwidth
+LIVE_PAYLOAD_CACHE = {"aircraft": []}
+METADATA_CACHE = {}
+
+@app.route("/api/update", methods=["POST"])
 def update_aircraft_data():
     """Receive live data pushed from local feeder script."""
-    secret = request.headers.get('Authorization') or request.args.get('secret')
+    secret = request.headers.get("Authorization") or request.args.get("secret")
     if secret != FEEDER_SECRET and secret != f"Bearer {FEEDER_SECRET}":
         return jsonify({"error": "Unauthorized"}), 401
         
     payload = request.json
-    if payload and 'aircraft' in payload:
+    if payload and "aircraft" in payload:
         conn = None
         try:
             conn = get_db_connection()
@@ -361,40 +365,67 @@ def update_aircraft_data():
             else:
                 cursor = conn.cursor()
                 
-            # Save raw payload for stateless retrieval
-            payload_str = json.dumps(payload)
-            upsert_q = "UPDATE latest_payload SET payload = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1"
-            if DB_TYPE == "postgres": upsert_q = upsert_q.replace("?", "%s")
-            cursor.execute(upsert_q, (payload_str,))
-            if cursor.rowcount == 0:
-                insert_q = "INSERT INTO latest_payload (id, payload) VALUES (1, ?)"
-                if DB_TYPE == "postgres": insert_q = insert_q.replace("?", "%s")
-                cursor.execute(insert_q, (payload_str,))
-
-            # Fetch metadata map for aircraft hexes using the single existing cursor
-            hexes = [p.get('hex', '').lower() for p in payload['aircraft'] if p.get('hex')]
-            metadata_map = {}
-            if hexes:
-                placeholders = ','.join(['%s' if DB_TYPE == 'postgres' else '?'] * len(hexes))
+            global LIVE_PAYLOAD_CACHE, METADATA_CACHE
+            
+            # Fetch metadata map for new aircraft hexes using the single existing cursor
+            hexes = [p.get("hex", "").lower() for p in payload["aircraft"] if p.get("hex")]
+            new_hexes = [h for h in hexes if h not in METADATA_CACHE]
+            
+            if new_hexes:
+                placeholders = ",".join(["%s" if DB_TYPE == "postgres" else "?"] * len(new_hexes))
                 meta_query = f"SELECT icao24, registration, model, typecode, operator FROM aircraft_metadata WHERE icao24 IN ({placeholders})"
-                cursor.execute(meta_query, tuple(hexes))
+                cursor.execute(meta_query, tuple(new_hexes))
                 meta_rows = cursor.fetchall()
                 if meta_rows:
                     for row in meta_rows:
                         r_dict = dict(row)
-                        metadata_map[r_dict['icao24']] = r_dict
+                        METADATA_CACHE[r_dict["icao24"]] = r_dict
+                        
+            # Strip payload for frontend bandwidth savings
+            stripped_aircraft = []
+            for plane in payload["aircraft"]:
+                seen = plane.get("seen", 0)
+                if seen < 15:
+                    hex_code = plane.get("hex", "").lower()
+                    db_info = METADATA_CACHE.get(hex_code, {})
+                    min_plane = {
+                        "hex": hex_code,
+                        "flight": plane.get("flight", "").strip() if plane.get("flight") else "",
+                        "lat": plane.get("lat"),
+                        "lon": plane.get("lon"),
+                        "alt_baro": plane.get("alt_baro"),
+                        "alt_geom": plane.get("alt_geom"),
+                        "altitude": plane.get("altitude"),
+                        "track": plane.get("track"),
+                        "heading": plane.get("heading"),
+                        "mag_heading": plane.get("mag_heading"),
+                        "nav_heading": plane.get("nav_heading"),
+                        "gs": plane.get("gs"),
+                        "spd": plane.get("spd"),
+                        "speed": plane.get("speed"),
+                        "squawk": str(plane.get("squawk", "")),
+                        "seen": seen
+                    }
+                    if db_info:
+                        if db_info.get("registration"): min_plane["registration"] = db_info["registration"]
+                        if db_info.get("model"): min_plane["model"] = db_info["model"]
+                        if db_info.get("typecode"): min_plane["typecode"] = db_info["typecode"]
+                        if db_info.get("operator"): min_plane["operator"] = db_info["operator"]
+                    stripped_aircraft.append(min_plane)
+                    
+            LIVE_PAYLOAD_CACHE["aircraft"] = stripped_aircraft
 
             # Save history
-            hist_query = '''
+            hist_query = """
                 INSERT INTO aircraft_history (hex, callsign, lat, lon, altitude, heading, speed, track, track_diff, operator, model, is_military)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            '''
+            """
             if DB_TYPE == "postgres": hist_query = hist_query.replace("?", "%s")
 
-            for plane in payload['aircraft']:
-                seen = plane.get('seen', 0)
+            for plane in payload["aircraft"]:
+                seen = plane.get("seen", 0)
                 if seen < 15:
-                    hex_code = plane.get('hex', '').lower()
+                    hex_code = plane.get("hex", "").lower()
                     
                     # 60-second sampling: Only insert to history once per minute per aircraft
                     now = time.time()
@@ -404,18 +435,18 @@ def update_aircraft_data():
                             continue
                         _last_history_save[hex_code] = now
 
-                    callsign = plane.get('flight', '').strip()
-                    lat = plane.get('lat')
-                    lon = plane.get('lon')
-                    altitude = plane.get('alt_baro') or plane.get('alt_geom')
-                    track = plane.get('track')
-                    heading = plane.get('mag_heading') if plane.get('mag_heading') is not None else (plane.get('heading') if plane.get('heading') is not None else plane.get('nav_heading'))
-                    speed = plane.get('gs') or plane.get('spd') or plane.get('speed')
+                    callsign = plane.get("flight", "").strip() if plane.get("flight") else ""
+                    lat = plane.get("lat")
+                    lon = plane.get("lon")
+                    altitude = plane.get("alt_baro") or plane.get("alt_geom") or plane.get("altitude")
+                    track = plane.get("track")
+                    heading = plane.get("mag_heading") if plane.get("mag_heading") is not None else (plane.get("heading") if plane.get("heading") is not None else plane.get("nav_heading"))
+                    speed = plane.get("gs") or plane.get("spd") or plane.get("speed")
                     
-                    meta = metadata_map.get(hex_code, {})
-                    operator = plane.get('operator') or meta.get('operator')
-                    model = plane.get('model') or meta.get('model') or meta.get('typecode')
-                    squawk = str(plane.get('squawk', ''))
+                    meta = METADATA_CACHE.get(hex_code, {})
+                    operator = plane.get("operator") or meta.get("operator")
+                    model = plane.get("model") or meta.get("model") or meta.get("typecode")
+                    squawk = str(plane.get("squawk", ""))
                     
                     track_diff = None
                     if track is not None and heading is not None:
@@ -429,13 +460,13 @@ def update_aircraft_data():
 
                     is_mili = 0
                     call_upper = callsign.upper()
-                    op_upper = (operator or '').upper()
-                    mili_prefixes = ('RCH', 'PAT', 'SAM', 'CNV', 'GOTO', 'FORTE', 'JEDI', 'VIPER', 'TUSK', 'BONE', 'SHUCK', 'DARK', 'EVAC')
-                    is_af_military = call_upper.startswith('AF') and not call_upper.startswith(('AFR', 'AFL', 'AFE', 'AFW'))
-                    if squawk in ['7500', '7600', '7700'] or call_upper.startswith(mili_prefixes) or is_af_military or any(kw in op_upper for kw in ['AIR FORCE', 'NAVY', 'ARMY', 'COAST GUARD', 'MARINES', 'MILITARY', 'LUFTWAFFE']):
+                    op_upper = (operator or "").upper()
+                    mili_prefixes = ("RCH", "PAT", "SAM", "CNV", "GOTO", "FORTE", "JEDI", "VIPER", "TUSK", "BONE", "SHUCK", "DARK", "EVAC")
+                    is_af_military = call_upper.startswith("AF") and not call_upper.startswith(("AFR", "AFL", "AFE", "AFW"))
+                    if squawk in ["7500", "7600", "7700"] or call_upper.startswith(mili_prefixes) or is_af_military or any(kw in op_upper for kw in ["AIR FORCE", "NAVY", "ARMY", "COAST GUARD", "MARINES", "MILITARY", "LUFTWAFFE"]):
                         is_mili = 1
                         
-                    if is_mili == 1 and model and any(ga in model.upper() for ga in ['PA-28', 'C172', 'C152', 'SR22', 'CESSNA 172', 'CESSNA 152']):
+                    if is_mili == 1 and model and any(ga in model.upper() for ga in ["PA-28", "C172", "C152", "SR22", "CESSNA 172", "CESSNA 152"]):
                         is_mili = 0
 
                     if lat is not None and lon is not None:
@@ -443,7 +474,7 @@ def update_aircraft_data():
             
             # Cleanup old data (> 7 days) periodically (1% of requests) to prevent DB lock contention
             if random.random() < 0.01:
-                cutoff = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time() - 7 * 86400))
+                cutoff = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(time.time() - 7 * 86400))
                 del_query = "DELETE FROM aircraft_history WHERE timestamp <= ?"
                 if DB_TYPE == "postgres": del_query = del_query.replace("?", "%s")
                 cursor.execute(del_query, (cutoff,))
@@ -464,53 +495,12 @@ def update_aircraft_data():
                 try: conn.close()
                 except Exception: pass
 
-    return jsonify({"status": "success", "aircraft_count": len(request.json.get('aircraft', []))})
+    return jsonify({"status": "success", "aircraft_count": len(request.json.get("aircraft", []))})
 
-@app.route('/api/data')
+@app.route("/api/data")
 def get_aircraft_data():
-    """Return live aircraft data from memory, enriched with database details."""
-    try:
-        with get_db_connection() as conn:
-            query = "SELECT payload FROM latest_payload WHERE id = 1"
-            res = execute_query(conn, query)
-            if not res or not res[0]['payload']:
-                return jsonify({"aircraft": []})
-                
-            data = json.loads(res[0]['payload'])
-            active_aircraft = []
-            
-            if 'aircraft' in data:
-                # Extract hex codes to fetch metadata
-                hexes = [p.get('hex', '').lower() for p in data['aircraft'] if p.get('hex')]
-                
-                metadata_map = {}
-                if hexes:
-                    placeholders = ','.join(['%s' if DB_TYPE == 'postgres' else '?'] * len(hexes))
-                    meta_query = f"SELECT icao24, registration, model, typecode, operator FROM aircraft_metadata WHERE icao24 IN ({placeholders})"
-                    meta_res = execute_query(conn, meta_query, tuple(hexes))
-                    if meta_res:
-                        for row in meta_res:
-                            metadata_map[row['icao24']] = row
-
-                for plane in data['aircraft']:
-                    seen = plane.get('seen', 0)
-                    if seen < 15:
-                        hex_code = plane.get('hex', '').lower()
-                        db_info = metadata_map.get(hex_code)
-                        if db_info:
-                            if db_info['registration']: plane['registration'] = db_info['registration']
-                            if db_info['model']: plane['model'] = db_info['model']
-                            if db_info['typecode']: plane['typecode'] = db_info['typecode']
-                            if db_info['operator']: plane['operator'] = db_info['operator']
-                            
-                        active_aircraft.append(plane)
-                
-                data['aircraft'] = active_aircraft
-                
-            return jsonify(data)
-    except Exception as e:
-        print(f"Error fetching data: {e}")
-        return jsonify({"error": str(e)}), 500
+    """Return live aircraft data directly from memory, bypassing the database completely."""
+    return jsonify(LIVE_PAYLOAD_CACHE)
 
 @app.route('/api/search')
 def search_aircraft():
