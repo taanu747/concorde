@@ -370,6 +370,8 @@ def update_aircraft_data():
             # Fetch metadata map for new aircraft hexes using the single existing cursor
             hexes = [p.get("hex", "").lower() for p in payload["aircraft"] if p.get("hex")]
             new_hexes = [h for h in hexes if h not in METADATA_CACHE]
+            for h in new_hexes:
+                METADATA_CACHE[h] = {} # Cache misses to prevent repeated queries
             
             if new_hexes:
                 placeholders = ",".join(["%s" if DB_TYPE == "postgres" else "?"] * len(new_hexes))
