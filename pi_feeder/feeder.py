@@ -6,7 +6,7 @@ import os
 
 def main():
     parser = argparse.ArgumentParser(description="Push Raspberry Pi dump1090 data to Cloud backend.")
-    parser.add_argument("--target-url", required=True, help="Your Vercel backend URL (e.g. https://your-app.vercel.app)")
+    parser.add_argument("--target-url", required=True, help="Your Render backend URL (e.g. https://your-app.onrender.com)")
     parser.add_argument("--secret", required=True, help="Secret token for authentication")
     # By default, dump1090-fa writes its live JSON to the Raspberry Pi's RAM disk
     parser.add_argument("--source-file", default="/run/dump1090-fa/aircraft.json", help="Local dump1090 JSON file path")

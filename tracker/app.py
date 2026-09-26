@@ -417,6 +417,19 @@ def update_aircraft_data():
                     
             LIVE_PAYLOAD_CACHE["aircraft"] = stripped_aircraft
 
+            try:
+                import json
+                payload_str = json.dumps(LIVE_PAYLOAD_CACHE)
+                upsert_q = "UPDATE latest_payload SET payload = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1"
+                if DB_TYPE == "postgres": upsert_q = upsert_q.replace("?", "%s")
+                cursor.execute(upsert_q, (payload_str,))
+                if cursor.rowcount == 0:
+                    insert_q = "INSERT INTO latest_payload (id, payload) VALUES (1, ?)"
+                    if DB_TYPE == "postgres": insert_q = insert_q.replace("?", "%s")
+                    cursor.execute(insert_q, (payload_str,))
+            except Exception as e:
+                print(f"Error saving to latest_payload: {e}")
+
             # Save history
             hist_query = """
                 INSERT INTO aircraft_history (hex, callsign, lat, lon, altitude, heading, speed, track, track_diff, operator, model, is_military)
@@ -501,7 +514,26 @@ def update_aircraft_data():
 
 @app.route("/api/data")
 def get_aircraft_data():
-    """Return live aircraft data directly from memory, bypassing the database completely."""
+    """Return live aircraft data. Fallback to DB if memory cache is empty."""
+    global LIVE_PAYLOAD_CACHE
+    if not LIVE_PAYLOAD_CACHE.get("aircraft"):
+        try:
+            with get_db_connection() as conn:
+                if DB_TYPE == "postgres":
+                    cursor = conn.cursor(cursor_factory=RealDictCursor)
+                else:
+                    cursor = conn.cursor()
+                cursor.execute("SELECT payload FROM latest_payload WHERE id = 1")
+                row = cursor.fetchone()
+                if row:
+                    payload = row['payload'] if isinstance(row, dict) else row[0]
+                    if isinstance(payload, str):
+                        import json
+                        payload = json.loads(payload)
+                    LIVE_PAYLOAD_CACHE = payload
+        except Exception as e:
+            print(f"Error reading latest_payload: {e}")
+            
     return jsonify(LIVE_PAYLOAD_CACHE)
 
 @app.route('/api/search')
@@ -854,7 +886,7 @@ def get_analytics_dashboard():
                 
                 if avg_drift == 0.0:
                     with lock:
-                        aircraft_dict = latest_payload.get('aircraft', {})
+                        aircraft_dict = LIVE_PAYLOAD_CACHE.get('aircraft', {})
                         target_list = aircraft_dict.values() if isinstance(aircraft_dict, dict) else (aircraft_dict if isinstance(aircraft_dict, list) else [])
                         diffs = []
                         for p in target_list:
@@ -1056,7 +1088,7 @@ def ai_copilot_query():
                     cand = cand_raw.strip()
                     # Search live payload first
                     with lock:
-                        aircraft_dict = latest_payload.get('aircraft', {})
+                        aircraft_dict = LIVE_PAYLOAD_CACHE.get('aircraft', {})
                         target_list = aircraft_dict.values() if isinstance(aircraft_dict, dict) else (aircraft_dict if isinstance(aircraft_dict, list) else [])
                         for p in target_list:
                             cs = (p.get('flight') or p.get('callsign') or '').strip().upper()

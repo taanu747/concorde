@@ -39,7 +39,7 @@ def generate_mock_data():
 
 def main():
     parser = argparse.ArgumentParser(description="Mock Feeder for Vercel/Supabase")
-    parser.add_argument("--target-url", required=True, help="Your Vercel URL (e.g. https://your-project.vercel.app)")
+    parser.add_argument("--target-url", required=True, help="Your Render URL (e.g. https://your-project.onrender.com)")
     parser.add_argument("--secret", required=True, help="Your FEEDER_SECRET")
     args = parser.parse_args()
 

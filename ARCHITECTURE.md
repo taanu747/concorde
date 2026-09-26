@@ -27,7 +27,7 @@ concorde/
     ├── aircraftDatabase.csv         # OpenSky Network aircraft metadata database (~94 MB, ICAO24 mappings)
     ├── aircraft_history.db          # Local SQLite development database (auto-created if Postgres not configured)
     ├── requirements.txt             # Backend dependencies (flask, psycopg2, requests)
-    ├── vercel.json                  # Vercel serverless deployment routing configuration
+
     ├── static/                      # Frontend Assets & Client Logic
     │   ├── app.js                   # Primary Leaflet map engine, polling loop, search & AI Co-Pilot UI
     │   └── style.css                # Custom glassmorphic CSS styling, responsive desktop/mobile rules
@@ -167,4 +167,4 @@ graph TD
    - Run setup script: `sudo bash pi_feeder/setup_pi.sh`
    - Configures systemd unit `concorde-feeder.service` to push Pi telemetry automatically on boot.
 3. **Vercel Cloud Production**:
-   - Deploys Flask application automatically via `tracker/vercel.json` with PostgreSQL database bindings (`DATABASE_URL`).
+   - Deploys Flask application automatically (e.g. via Render) with PostgreSQL database bindings (`DATABASE_URL`).
