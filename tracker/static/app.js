@@ -628,15 +628,28 @@ const fetchAndRender = async (url) => {
 
         // Update indicator dot class
         const dot = document.querySelector('.dot');
+        const liveText = document.querySelector('.live-text');
         if (dot) {
-            dot.className = isLiveMode ? 'dot live' : 'dot historical';
+            if (isLiveMode) {
+                const isStale = data.now && (Date.now() / 1000 - data.now > 180);
+                dot.className = isStale ? 'dot offline' : 'dot live';
+                if (liveText) {
+                    liveText.textContent = isStale ? 'Offline (Stale)' : 'Live Data';
+                }
+            } else {
+                dot.className = 'dot historical';
+            }
         }
 
     } catch (error) {
         console.error('Error fetching aircraft data:', error);
         const dot = document.querySelector('.dot');
+        const liveText = document.querySelector('.live-text');
         if (dot && isLiveMode) {
             dot.className = 'dot offline';
+            if (liveText) {
+                liveText.textContent = 'Offline (Error)';
+            }
         }
     }
 };
@@ -772,7 +785,7 @@ if (historySubmitBtn && historyLiveBtn && historyTimeInput) {
         if (statusIndicator) {
             statusIndicator.innerHTML = `
                 <span id="aircraft-count" style="margin-right: 12px; font-weight: 600; color: #cbd5e1;">0 Aircraft</span>
-                <span class="dot live"></span> Live Data
+                <span class="dot live"></span> <span class="live-text">Live Data</span>
             `;
         }
 

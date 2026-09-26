@@ -416,6 +416,7 @@ def update_aircraft_data():
                     stripped_aircraft.append(min_plane)
                     
             LIVE_PAYLOAD_CACHE["aircraft"] = stripped_aircraft
+            LIVE_PAYLOAD_CACHE["now"] = payload.get("now", time.time())
 
             try:
                 import json
