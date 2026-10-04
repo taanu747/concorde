@@ -406,11 +406,11 @@ const createRotatedPlaneIcon = (plane, heading, planeType, alt) => {
 
 // Function to generate the HTML for the popup
 const generatePopupHTML = (plane) => {
-    const alt = plane.alt_baro !== undefined ? plane.alt_baro : (plane.alt !== undefined ? plane.alt : plane.altitude);
-    const displayAlt = alt !== undefined ? (alt === 'ground' ? 'Ground' : alt.toLocaleString() + ' ft') : 'Unknown';
+    const alt = plane.alt_baro != null ? plane.alt_baro : (plane.alt != null ? plane.alt : plane.altitude);
+    const displayAlt = alt != null ? (alt === 'ground' ? 'Ground' : alt.toLocaleString() + ' ft') : 'Unknown';
 
-    const spd = plane.gs !== undefined ? plane.gs : (plane.spd !== undefined ? plane.spd : plane.speed);
-    const displaySpd = spd !== undefined ? Math.round(spd) + ' kts' : 'Unknown';
+    const spd = plane.gs != null ? plane.gs : (plane.spd != null ? plane.spd : plane.speed);
+    const displaySpd = spd != null ? Math.round(spd) + ' kts' : 'Unknown';
 
     // Parse ADS-B generic category
     let typeText = plane.category || 'Unknown';

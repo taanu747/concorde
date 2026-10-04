@@ -407,7 +407,9 @@ def update_aircraft_data():
                     callsign = plane.get('flight', '').strip()
                     lat = plane.get('lat')
                     lon = plane.get('lon')
-                    altitude = plane.get('alt_baro') or plane.get('alt_geom')
+                    altitude = plane.get('alt_baro') or plane.get('alt_geom') or plane.get('altitude')
+                    if altitude == "ground":
+                        altitude = 0
                     track = plane.get('track')
                     heading = plane.get('mag_heading') if plane.get('mag_heading') is not None else (plane.get('heading') if plane.get('heading') is not None else plane.get('nav_heading'))
                     speed = plane.get('gs') or plane.get('spd') or plane.get('speed')
