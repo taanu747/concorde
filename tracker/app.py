@@ -12,8 +12,6 @@ import threading
 import re
 import random
 from flask import Flask, jsonify, render_template, request
-from google import genai
-import markdown
 
 # Database Configuration
 DATABASE_URL = os.environ.get("DATABASE_URL")
@@ -1214,17 +1212,9 @@ def ai_copilot_query():
                 sys_prompt += f"\\n\\nThe user is asking about this active flight. Here is the live telemetry data:\\n{json.dumps(aircraft_state)}"
                 sys_prompt += "\\n\\nUse this data (altitude, speed, heading, track, operator, model) to explicitly explain what the flight is doing. Note: The difference between track (ground path) and heading (nose direction) indicates wind drift crab angle."
 
-            client = genai.Client(api_key=gemini_api_key)
-            response = client.models.generate_content(
-                model='gemini-3.6-flash',
-                contents=[sys_prompt, user_query]
-            )
-
-            html_text = markdown.markdown(response.text)
-            
             return jsonify({
                 "type": "explanation",
-                "text": html_text
+                "text": "Gemini AI features have been temporarily disabled to resolve a deployment bug."
             })
 
     except Exception as e:
